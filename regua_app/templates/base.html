@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or 'Régua de Comunicação CRM' }}</title>
+
+    <!-- Bootstrap (para grid, componentes e responsividade) -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      crossorigin="anonymous"
+    />
+
+    <!-- Font Awesome (ícones no header e ações) -->
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+
+    <!-- Estilo embutido: paleta Safra + UI moderna -->
+    <style>
+      :root{
+        --safra-blue:#002d62;       /* azul escuro Safra aproximado */
+        --safra-blue-2:#0b3870;     /* variação para hover */
+        --safra-gold:#c9a227;       /* dourado aproximado */
+        --safra-gold-2:#e0be3a;     /* dourado hover */
+        --bg-soft:#f5f6f8;          /* fundo claro da app */
+        --card-radius:14px;
+        --ring:0 10px 30px rgba(0,0,0,.08);
+      }
+
+      html,body{height:100%;}
+      body{
+        background: var(--bg-soft);
+        color:#283044;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* NAVBAR — moderno, fixo e com paleta Safra */
+      .navbar-safra{
+        position:sticky; top:0; z-index:1030;
+        background: linear-gradient(180deg, var(--safra-blue), #001e44 80%);
+        border-bottom: 3px solid var(--safra-gold);
+        box-shadow: 0 8px 24px rgba(0,0,0,.12);
+      }
+      .navbar-safra .navbar-brand{
+        color:#fff; letter-spacing:.3px; font-weight:700;
+      }
+      .navbar-safra .navbar-brand .brand-dot{
+        display:inline-block; width:8px; height:8px; border-radius:50%;
+        background:var(--safra-gold); margin-left:6px; vertical-align:middle;
+      }
+      .navbar-safra .nav-link{
+        color:#e9eef6; font-weight:500; margin-right:.35rem;
+        border-radius:10px; padding:.5rem .75rem;
+        transition: all .2s ease;
+      }
+      .navbar-safra .nav-link:hover,
+      .navbar-safra .nav-link:focus{
+        color:#fff; background: rgba(255,255,255,.08);
+      }
+      .navbar-safra .nav-link .fa-solid{ color:var(--safra-gold); }
+      .navbar-safra .navbar-toggler{
+        border-color: rgba(255,255,255,.35);
+      }
+      .navbar-safra .navbar-toggler-icon{
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='%23c9a227' viewBox='0 0 30 30'%3e%3cpath stroke='%23c9a227' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+      }
+
+      /* CONTEÚDO */
+      .page-shell{
+        padding: 24px 0 48px;
+      }
+      .content-card{
+        background:#fff; border-radius: var(--card-radius); box-shadow: var(--ring);
+        padding: 22px; border: 1px solid #eef0f4;
+      }
+
+      /* ALERTS elegantes */
+      .alert{
+        border:0; border-left:4px solid var(--safra-gold);
+        box-shadow: 0 8px 18px rgba(0,0,0,.06);
+      }
+
+      /* BOTÕES com paleta Safra */
+      .btn-primary{
+        background: var(--safra-blue); border-color: var(--safra-blue);
+      }
+      .btn-primary:hover{ background: var(--safra-blue-2); border-color: var(--safra-blue-2); }
+      .btn-outline-primary{
+        color: var(--safra-blue); border-color: var(--safra-blue);
+      }
+      .btn-outline-primary:hover{
+        background: var(--safra-blue); color:#fff;
+      }
+      .btn-gold{
+        background: var(--safra-gold); border-color: var(--safra-gold); color:#19202a;
+      }
+      .btn-gold:hover{
+        background: var(--safra-gold-2); border-color: var(--safra-gold-2); color:#10151c;
+      }
+
+      /* FORMULÁRIOS */
+      .form-label{ font-weight:600; color: var(--safra-blue); }
+      .form-control, .form-select{
+        border-radius:10px; border:1px solid #e2e6ee;
+      }
+      .form-control:focus, .form-select:focus{
+        border-color: var(--safra-blue);
+        box-shadow: 0 0 0 .2rem rgba(0,45,98,.15);
+      }
+
+      /* TABELAS — responsivas, cabeçalho azul e texto dourado */
+      .table-wrap{ overflow:auto; border-radius: 12px; border:1px solid #eef0f4; }
+      .table{
+        margin-bottom:0;
+      }
+      .table thead th{
+        background: var(--safra-blue);
+        color: var(--safra-gold);
+        font-weight:700; border:0; vertical-align:middle;
+      }
+      .table tbody td{
+        vertical-align: middle; border-color:#f0f2f6;
+      }
+      .table-striped>tbody>tr:nth-of-type(odd)>*{
+        background-color:#fafbfc;
+      }
+      .table-hover tbody tr:hover>*{
+        background-color:#f2f6ff;
+      }
+      .table .badge-id{
+        background: #eef2f8; color:#1f2a44; border:1px solid #dde3ee;
+        font-weight:600;
+      }
+
+      /* RODAPÉ */
+      footer{
+        color:#6b7380; padding: 28px 0; font-size:.95rem;
+      }
+      footer a{ color: var(--safra-blue); text-decoration:none; }
+      footer a:hover{ color: var(--safra-gold); text-decoration:underline; }
+    </style>
+  </head>
+
+  <body>
+    <!-- HEADER -->
+    <nav class="navbar navbar-expand-lg navbar-safra py-2">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="{{ url_for('routes.home') }}">
+          Régua CRM <span class="brand-dot"></span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Alternar navegação">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav me-auto">
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('routes.novo_tema') }}">
+                <i class="fa-solid fa-book-medical me-1"></i> Novo Tema
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('routes.novo_regra') }}">
+                <i class="fa-solid fa-gavel me-1"></i> Nova Regra
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('routes.novo_tema_regra') }}">
+                <i class="fa-solid fa-link me-1"></i> Vincular Tema–Regra
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('routes.novo_dia') }}">
+                <i class="fa-solid fa-calendar-plus me-1"></i> Adicionar Dia
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('routes.uml') }}">
+                <i class="fa-solid fa-project-diagram me-1"></i> UML
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <!-- CONTEÚDO -->
+    <div class="container page-shell">
+      <div class="content-card">
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="alert alert-success mb-4">
+              {% for message in messages %}<div>{{ message }}</div>{% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+
+    <!-- RODAPÉ -->
+    <footer class="text-center">
+      <div class="container">
+        <small>Régua de Comunicação CRM — UI inspirada na paleta Safra.</small>
+      </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+  </body>
+</html>

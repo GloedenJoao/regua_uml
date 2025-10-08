@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Visão Geral</h2>
+
+<h3>Temas</h3>
+<table class="table table-sm table-striped">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Nome</th>
+      <th>Descrição</th>
+      <th>Objetivo</th>
+      <th>Alternativo</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in temas %}
+    <tr>
+      <td>{{ t.id }}</td>
+      <td>{{ t.nome }}</td>
+      <td>{{ t.descricao }}</td>
+      <td>{{ t.objetivo }}</td>
+      <td>{% if t.alternativo %}{{ t.alternativo.nome }}{% endif %}</td>
+      <td>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('routes.editar_tema', tema_id=t.id) }}">Editar</a>
+        <form action="{{ url_for('routes.deletar_tema', tema_id=t.id) }}" method="post" class="d-inline" onsubmit="return confirm('Excluir tema? Esta ação removerá vínculos e dias relacionados.');">
+          <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>Regras</h3>
+<table class="table table-sm table-striped">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Descrição</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in regras %}
+    <tr>
+      <td>{{ r.id }}</td>
+      <td>{{ r.descricao }}</td>
+      <td>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('routes.editar_regra', regra_id=r.id) }}">Editar</a>
+        <form action="{{ url_for('routes.deletar_regra', regra_id=r.id) }}" method="post" class="d-inline" onsubmit="return confirm('Excluir regra? Esta ação removerá vínculos e dias relacionados.');">
+          <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>Vínculos Tema–Regra</h3>
+<table class="table table-sm table-striped">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Tema</th>
+      <th>Regra</th>
+      <th>Alternativo</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for tr in temas_regras %}
+    <tr>
+      <td>{{ tr.id }}</td>
+      <td>{{ tr.tema.nome }}</td>
+      <td>{{ tr.regra.descricao }}</td>
+      <td>{% if tr.tema_alternativo %}{{ tr.tema_alternativo.nome }}{% endif %}</td>
+      <td>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('routes.editar_tema_regra', tr_id=tr.id) }}">Editar</a>
+        <form action="{{ url_for('routes.deletar_tema_regra', tr_id=tr.id) }}" method="post" class="d-inline" onsubmit="return confirm('Excluir vínculo? Esta ação removerá dias relacionados.');">
+          <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>Dias de Comunicações</h3>
+<table class="table table-sm table-striped">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Dia</th>
+      <th>Vínculo Tema–Regra</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in dias %}
+    <tr>
+      <td>{{ d.id }}</td>
+      <td>{{ d.dia }}</td>
+      <td>{{ d.tema_regra.tema.nome }} / {{ d.tema_regra.regra.descricao }}</td>
+      <td>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('routes.editar_dia', dia_id=d.id) }}">Editar</a>
+        <form action="{{ url_for('routes.deletar_dia', dia_id=d.id) }}" method="post" class="d-inline" onsubmit="return confirm('Excluir dia?');">
+          <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

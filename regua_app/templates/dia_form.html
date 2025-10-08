@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>{% if dia %}Editar Dia de Comunicação{% else %}Adicionar Dia de Comunicação{% endif %}</h2>
+<form method="post">
+  <div class="mb-3">
+    <label for="dia" class="form-label">Dia</label>
+    <input
+      type="number"
+      id="dia"
+      name="dia"
+      class="form-control"
+      min="0"
+      required
+      value="{{ dia.dia if dia else '' }}"
+    />
+  </div>
+  <div class="mb-3">
+    <label for="tr_id" class="form-label">Vínculo Tema–Regra</label>
+    <select id="tr_id" name="tr_id" class="form-select" required>
+      {% for tr in tema_regras %}
+      <option value="{{ tr.id }}" {% if dia and dia.tema_regra_id == tr.id %}selected{% endif %}>{{ tr.tema.nome }} / {{ tr.regra.descricao }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Salvar</button>
+  <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>
+</form>
+{% endblock %}
