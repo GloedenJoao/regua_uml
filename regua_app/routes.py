@@ -22,9 +22,12 @@ from flask import (
     redirect,
     url_for,
     flash,
+    Response
 )
 from . import db
 from .models import Tema, Regra, TemaRegra, DiaComunicacao
+from sqlalchemy.orm import selectinload
+
 
 bp = Blueprint('routes', __name__)
 
@@ -188,12 +191,20 @@ def deletar_tema_regra(tr_id):
 
 @bp.route('/dia/novo', methods=['GET', 'POST'])
 def novo_dia():
-    """Create a new DiaComunicacao for a given TemaRegra."""
     tema_regras = TemaRegra.query.all()
     if request.method == 'POST':
-        dia = int(request.form.get('dia'))
-        tr_id = int(request.form.get('tr_id'))
-        dc = DiaComunicacao(dia=dia, tema_regra_id=tr_id)
+        dia = int(request.form['dia'])
+        tr_id = int(request.form['tr_id'])
+        tr = TemaRegra.query.get_or_404(tr_id)
+        # cria o registro copiando os dados do vínculo
+        dc = DiaComunicacao(
+            dia=dia,
+            tema_regra_id=tr_id,
+            tema_id=tr.tema_id,
+            tema_nome=tr.tema.nome,
+            regra_id=tr.regra_id,
+            tema_id_alternativo=tr.tema_id_alternativo
+        )
         db.session.add(dc)
         db.session.commit()
         flash('Dia de comunicação adicionado com sucesso!')
@@ -225,58 +236,117 @@ def deletar_dia(dia_id):
     return redirect(url_for('routes.home'))
 
 
-@bp.route('/uml')
-def uml():
-    """Renderiza o diagrama da régua usando Mermaid em vez de Graphviz.
+from .models import DiaComunicacao, TemaRegra
 
-    Esta versão não requer a instalação do executável Graphviz.  Para cada
-    `TemaRegra` o código monta uma linha Mermaid no formato:
-
-        TR1["Tema / Regra"] -->|Dia X| END
-
-    que o Mermaid renderizará como uma aresta rotulada.  O nó "END" é
-    adicionado ao final do diagrama para representar o destino das
-    comunicações.
+def gerar_diagrama_mermaid() -> str:
     """
-    lines = ["graph LR"]
-    # Mapeia cada dia para a lista de comunicações (Tema / Regra) associadas
-    dias_dict = {}
-    # Faz uma consulta que já traz as relações necessárias
+    Gera o Mermaid (flowchart LR) mantendo os DIAS alinhados no topo:
+      1) Declara todos os nós de dia (D0..Dn).
+      2) Conecta D0 --> D1 --> ... --> Dn (isso ancora a 'linha' dos dias).
+      3) Para cada dia, adiciona decisão (se houver alternativo) e/ou tema(s),
+         ligando SEMPRE para baixo a partir de Dn (sem voltar para a cadeia de dias).
+    """
+    from sqlalchemy.orm import selectinload
+    from .models import DiaComunicacao, TemaRegra
+
     dias = (
         DiaComunicacao.query
-        .join(DiaComunicacao.tema_regra)
-        .join(TemaRegra.tema)
-        .join(TemaRegra.regra)
+        .options(
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema),
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.regra),
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema_alternativo),
+        )
         .all()
     )
-    for dia in dias:
-        numero = dia.dia
-        # Constrói a etiqueta com o tema e a descrição da regra
-        etiqueta = f"{dia.tema_regra.tema.nome} / {dia.tema_regra.regra.descricao}"
-        dias_dict.setdefault(numero, []).append(etiqueta)
-    # Ordena os dias para criar a série histórica
-    sorted_days = sorted(dias_dict.keys())
-    if sorted_days:
-        # Define um nó para cada dia com as comunicações listadas
-        for numero in sorted_days:
-            etiquetas = dias_dict[numero]
-            # Remove duplicidades mantendo a ordem
-            unique_labels = list(dict.fromkeys(etiquetas))
-            # Constrói a string da etiqueta com quebras de linha
-            label_str = "<br/>".join(unique_labels)
-            lines.append(f"    D{numero}[\"Dia {numero}<br/>{label_str}\"]")
-        # Conecta cada dia ao seguinte em ordem
-        for i in range(len(sorted_days) - 1):
-            atual = sorted_days[i]
-            proximo = sorted_days[i + 1]
-            lines.append(f"    D{atual} --> D{proximo}")
-        # Conecta o último dia ao fim
-        ultimo = sorted_days[-1]
-        lines.append(f"    D{ultimo} --> END")
-    else:
-        # Caso não existam dias registrados
-        lines.append("    D0[\"Sem dias cadastrados\"] --> END")
-    # Define o nó final
-    lines.append("    END(Fim)")
-    mermaid_code = "\n".join(lines)
+
+    # if not dias:
+    #     return 'flowchart LR\n    D0["Sem dias cadastrados"] --> END\n    END(Fim)'
+
+    # Agrupa por dia
+    por_dia = {}
+    for d in dias:
+        por_dia.setdefault(d.dia, []).append(d)
+
+    ordered_days = sorted(por_dia.keys())
+    lines = []
+    lines.append("flowchart LR")
+
+    # 1) Declarar todos os nós de dia primeiro (ancora no topo visual)
+    for n in ordered_days:
+        lines.append(f'    D{n}["Dia {n}"]')
+
+    # 2) Conectar a série histórica dos dias
+    for i in range(len(ordered_days) - 1):
+        a, b = ordered_days[i], ordered_days[i + 1]
+        lines.append(f'    D{a} --> D{b}')
+
+    # 3) Para cada dia, acrescentar decisões/temas somente para "baixo"
+    for n in ordered_days:
+        blocos = por_dia[n]
+        for idx, d in enumerate(blocos, start=1):
+            tema_principal = (
+                (d.tema_nome or "").strip()
+                or (d.tema_regra.tema.nome.strip()
+                    if d.tema_regra and d.tema_regra.tema and d.tema_regra.tema.nome
+                    else "Tema")
+            )
+
+            # Existe alternativo?
+            tem_alt = bool(d.tema_regra and d.tema_regra.tema_alternativo)
+
+            if tem_alt:
+                regra_desc = (
+                    (d.tema_regra.regra.descricao or "").strip()
+                    if d.tema_regra and d.tema_regra.regra else "Regra"
+                )
+                tema_alt = (
+                    d.tema_regra.tema_alternativo.nome.strip()
+                    if d.tema_regra.tema_alternativo and d.tema_regra.tema_alternativo.nome
+                    else "Alternativo"
+                )
+
+                dec_id  = f"DEC{n}_{idx}"
+                tpri_id = f"T{n}_{idx}_P"
+                talt_id = f"T{n}_{idx}_A"
+
+                # Declarar nós adicionais após a cadeia de dias
+                lines.append(f'    {dec_id}{{"{regra_desc}?"}}')
+                lines.append(f'    {tpri_id}["{tema_principal}"]')
+                lines.append(f'    {talt_id}["{tema_alt}"]')
+
+                # Conectar a partir de D{n} para baixo
+                lines.append(f'    D{n} --> {dec_id}')
+                lines.append(f'    {dec_id} -->|Sim| {tpri_id}')
+                lines.append(f'    {dec_id} -->|Não| {talt_id}')
+
+            else:
+                tpri_id = f"T{n}_{idx}_P"
+                lines.append(f'    {tpri_id}["{tema_principal}"]')
+                lines.append(f'    D{n} --> {tpri_id}')
+
+    # Nó final
+    # lines.append(f'    D{ordered_days[-1]} --> END')
+    # lines.append('    END(Fim)')
+
+    return "\n".join(lines)
+
+
+
+
+@bp.route('/uml')
+def uml():
+    mermaid_code = gerar_diagrama_mermaid()
     return render_template('uml.html', mermaid_code=mermaid_code)
+
+
+@bp.route('/uml/download')
+def download_uml():
+    """
+    Rota mantida apenas para compatibilidade.
+    Hoje o PDF é gerado no navegador (sem depender do servidor).
+    Esta rota retorna o código Mermaid atual como texto, caso alguém queira exportar.
+    """
+    codigo = gerar_diagrama_mermaid()
+    resp = Response(codigo, mimetype='text/plain; charset=utf-8')
+    resp.headers['Content-Disposition'] = 'attachment; filename=diagrama_uml.mmd'
+    return resp

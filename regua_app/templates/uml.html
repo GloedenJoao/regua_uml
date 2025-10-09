@@ -1,29 +1,117 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>Diagrama UML da Régua de Comunicação</h2>
-<p>O gráfico abaixo é gerado usando <a href="https://mermaid-js.github.io/mermaid/#/" target="_blank">Mermaid.js</a>. Cada nó representa um vínculo Tema–Regra e cada aresta é rotulada com o número do dia.</p>
+<h2>Diagrama da Régua</h2>
+<p>Por dia, a decisão da regra que leva à comunicação principal
+e a alternativa quando aplicável.</p>
 
-<!-- Carrega a biblioteca Mermaid a partir de uma CDN -->
+<!-- Mermaid -->
 <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-<script>
-  // Inicializa o Mermaid para renderizar os diagramas quando a página carregar
-  mermaid.initialize({ startOnLoad: true });
-</script>
+<!-- html2canvas para rasterizar o SVG -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<!-- jsPDF para gerar PDF no cliente -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
-<!--
-  O código do diagrama é inserido dentro de um elemento <pre> com a classe
-  "mermaid". O conteúdo de "mermaid_code" é gerado no Python e enviado
-  para este template. Quando a página for carregada, o Mermaid irá ler
-  este bloco e desenhar o diagrama no lado do cliente.
--->
-<pre class="mermaid">
-{{ mermaid_code }}
-</pre>
-
-<div class="mt-3">
+<div class="mb-2 d-flex gap-2">
   <a class="btn btn-secondary" href="{{ url_for('routes.home') }}">Voltar</a>
-  <a class="btn btn-primary" href="{{ url_for('routes.uml') }}">Atualizar Diagrama</a>
+  <a class="btn btn-outline-primary" href="{{ url_for('routes.uml') }}">Atualizar</a>
+  <!-- Mantemos o “mesmo botão” visualmente (classe btn btn-success),
+       mas agora é um botão que ativa o download no cliente -->
+  <button id="download-pdf" type="button" class="btn btn-success">Baixar PDF</button>
 </div>
 
+<!-- Contêiner onde o SVG do Mermaid será injetado -->
+<div id="uml-container" class="border rounded p-3 bg-white" style="overflow:auto;">
+  <!-- O SVG é inserido via JS -->
+</div>
+
+<script>
+  // Inicializa o Mermaid, mas NÃO renderiza automaticamente.
+  mermaid.initialize({ startOnLoad: false, theme: "default" });
+
+  // O código Mermaid vindo do servidor (escapado com tojson para segurança)
+  const MERMAID_CODE = {{ mermaid_code|tojson|safe }};
+
+  // Renderiza para SVG e injeta no container
+  function renderMermaid() {
+    const targetId = "uml-svg";
+    const container = document.getElementById("uml-container");
+
+    // Limpa o container antes de renderizar
+    container.innerHTML = "";
+
+    mermaid.render(targetId, MERMAID_CODE)
+      .then(({ svg }) => {
+        container.innerHTML = svg;
+
+        // Opcional: garantir fundo branco no SVG para impressão
+        const svgEl = container.querySelector("svg");
+        if (svgEl) {
+          svgEl.style.background = "#ffffff";
+        }
+      })
+      .catch((err) => {
+        console.error("Falha ao renderizar Mermaid:", err);
+        container.innerHTML = "<div class='text-danger'>Erro ao renderizar diagrama.</div>";
+      });
+  }
+
+  // Chama render assim que a página estiver pronta
+  document.addEventListener("DOMContentLoaded", renderMermaid);
+
+  // Utilitário: converte px para mm (aprox)
+  const PX_TO_MM = 0.264583;
+
+  // Gera e baixa o PDF do diagrama atual usando html2canvas + jsPDF
+  async function downloadPDF() {
+    const { jsPDF } = window.jspdf;
+    const container = document.getElementById("uml-container");
+
+    // Usa html2canvas para rasterizar o conteúdo do container (que inclui o SVG)
+    const canvas = await html2canvas(container, {
+      backgroundColor: "#ffffff",
+      scale: 2, // aumenta a resolução
+      useCORS: true
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+
+    // Dimensões do canvas em px
+    const pxW = canvas.width;
+    const pxH = canvas.height;
+
+    // Decide orientação do PDF com base no aspecto do diagrama
+    const orientation = pxW >= pxH ? "landscape" : "portrait";
+
+    // Tamanhos A4 em mm
+    const pageWidthMM  = orientation === "landscape" ? 297 : 210;
+    const pageHeightMM = orientation === "landscape" ? 210 : 297;
+
+    // Tamanho do diagrama em mm
+    const imgWmm = pxW * PX_TO_MM;
+    const imgHmm = pxH * PX_TO_MM;
+
+    // Calcula escala para caber na página respeitando margens
+    const marginMM = 10;
+    const maxW = pageWidthMM - marginMM * 2;
+    const maxH = pageHeightMM - marginMM * 2;
+
+    const scale = Math.min(maxW / imgWmm, maxH / imgHmm, 1.0);
+    const renderW = imgWmm * scale;
+    const renderH = imgHmm * scale;
+
+    // Centraliza
+    const x = (pageWidthMM - renderW) / 2;
+    const y = (pageHeightMM - renderH) / 2;
+
+    // Cria PDF e adiciona a imagem
+    const pdf = new jsPDF({ orientation, unit: "mm", format: "a4" });
+    pdf.addImage(imgData, "PNG", x, y, renderW, renderH);
+
+    // Baixa
+    pdf.save("diagrama_uml.pdf");
+  }
+
+  document.getElementById("download-pdf").addEventListener("click", downloadPDF);
+</script>
 {% endblock %}

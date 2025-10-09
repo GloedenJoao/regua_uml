@@ -87,5 +87,12 @@ class DiaComunicacao(db.Model):
 
     tema_regra = db.relationship('TemaRegra', backref='dias')
 
+    # ... dentro de class DiaComunicacao(db.Model):
+    tema_id = db.Column(db.Integer, nullable=False)
+    tema_nome = db.Column(db.String(100), nullable=False)
+    regra_id = db.Column(db.Integer, nullable=False)
+    tema_id_alternativo = db.Column(db.Integer, nullable=True)
+
+
     def __repr__(self):
         return f"<Dia {self.id}: Dia {self.dia} para TemaRegra {self.tema_regra_id}>"
