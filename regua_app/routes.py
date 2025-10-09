@@ -310,8 +310,22 @@ def gerar_diagrama_mermaid() -> str:
         por_dia.setdefault(d.dia, []).append(d)
 
     ordered_days = sorted(por_dia.keys())
+
+    fim_dia_valor = 99999
+    fim_node_id = f"D{fim_dia_valor}"
+    day_nodes = []
+    decision_nodes = []
+
     if not ordered_days:
-        return "flowchart LR\n    D0[\"Sem dias cadastrados\"]"
+        lines = [
+            "flowchart LR",
+            "    SD[\"Sem dias cadastrados\"]",
+            f"    {fim_node_id}[\"Fim\"]:::dia",
+            f"    SD --> {fim_node_id}",
+            "    classDef dia fill:#FFF3CD,stroke:#C77D00,stroke-width:2px,rx:8,ry:8;",
+            f"    class {fim_node_id} dia",
+        ]
+        return "\n".join(lines)
 
     def sanitize(texto: str, default: str) -> str:
         texto = (texto or '').strip()
@@ -343,11 +357,19 @@ def gerar_diagrama_mermaid() -> str:
     lines = ["flowchart LR"]
 
     for n in ordered_days:
-        lines.append(f'    D{n}["Dia {n}"]')
+        node_id = f'D{n}'
+        lines.append(f'    {node_id}["Dia {n}"]:::dia')
+        day_nodes.append(node_id)
+
+    lines.append(f'    {fim_node_id}["Fim"]:::dia')
+    day_nodes.append(fim_node_id)
 
     for i in range(len(ordered_days) - 1):
         a, b = ordered_days[i], ordered_days[i + 1]
         lines.append(f'    D{a} --> D{b}')
+
+    if ordered_days:
+        lines.append(f'    D{ordered_days[-1]} --> {fim_node_id}')
 
     for dia_valor in ordered_days:
         blocos = por_dia[dia_valor]
@@ -390,9 +412,11 @@ def gerar_diagrama_mermaid() -> str:
 
             for etapa in etapas:
                 if etapa['has_rule']:
+                    entry_id = etapa["entry_id"]
                     lines.append(
-                        f'    {etapa["entry_id"]}{{"{regra_para_decisao(etapa["regra"])}"}}'
+                        f'    {entry_id}{{"{regra_para_decisao(etapa["regra"])}"}}'
                     )
+                    decision_nodes.append(entry_id)
                 lines.append(f'    {etapa["msg_id"]}["{etapa["tema"]}"]')
 
             for pos, etapa in enumerate(etapas):
@@ -410,6 +434,14 @@ def gerar_diagrama_mermaid() -> str:
                 else:
                     if pos == 0:
                         lines.append(f'    D{dia_valor} --> {msg_id}')
+
+    if day_nodes:
+        lines.append('    classDef dia fill:#FFF3CD,stroke:#C77D00,stroke-width:2px,rx:8,ry:8;')
+        lines.append(f"    class {','.join(day_nodes)} dia")
+
+    if decision_nodes:
+        lines.append('    classDef decisao fill:#E2F0FF,stroke:#0F5DA3,stroke-width:2px;')
+        lines.append(f"    class {','.join(decision_nodes)} decisao")
 
     return "\n".join(lines)
 
