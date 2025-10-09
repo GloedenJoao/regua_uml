@@ -7,7 +7,9 @@
     <label for="tema_id" class="form-label">Tema</label>
     <select id="tema_id" name="tema_id" class="form-select" required>
       {% for t in temas %}
-      <option value="{{ t.id }}" {% if tema_regra and tema_regra.tema_id == t.id %}selected{% endif %}>{{ t.nome }}</option>
+      <option value="{{ t.id }}"{% if tema_regra and tema_regra.tema_id == t.id %} selected{% endif %}>
+        {{ t.nome }}
+      </option>
       {% endfor %}
     </select>
   </div>
@@ -15,18 +17,23 @@
     <label for="regra_id" class="form-label">Regra</label>
     <select id="regra_id" name="regra_id" class="form-select" required>
       {% for r in regras %}
-      <option value="{{ r.id }}" {% if tema_regra and tema_regra.regra_id == r.id %}selected{% endif %}>{{ r.descricao }}</option>
+      <option value="{{ r.id }}"{% if tema_regra and tema_regra.regra_id == r.id %} selected{% endif %}>
+        {{ r.descricao }}
+      </option>
       {% endfor %}
     </select>
   </div>
   <div class="mb-3">
-    <label for="tema_id_alternativo" class="form-label">Tema Alternativo (opcional)</label>
-    <select id="tema_id_alternativo" name="tema_id_alternativo" class="form-select">
-      <option value="">Nenhum</option>
-      {% for t in temas %}
-      <option value="{{ t.id }}" {% if tema_regra and tema_regra.tema_id_alternativo == t.id %}selected{% endif %}>{{ t.nome }}</option>
+    <label for="alternativa_id" class="form-label">Comunicação alternativa (opcional)</label>
+    <select id="alternativa_id" name="alternativa_id" class="form-select">
+      <option value="">Nenhuma</option>
+      {% for vinculo in tema_regra_opcoes %}
+      <option value="{{ vinculo.id }}"{% if tema_regra and tema_regra.alternativa_id == vinculo.id %} selected{% endif %}>
+        {{ vinculo.tema.nome }} — {{ vinculo.regra.descricao }}
+      </option>
       {% endfor %}
     </select>
+    <div class="form-text">Selecione um Tema + Regra já cadastrado que represente a comunicação alternativa.</div>
   </div>
   <button type="submit" class="btn btn-primary">Salvar</button>
   <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>

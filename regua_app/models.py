@@ -64,11 +64,22 @@ class TemaRegra(db.Model):
         db.ForeignKey('temas.id', ondelete='SET NULL'),
         nullable=True,
     )
+    alternativa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('temas_regras.id', ondelete='SET NULL'),
+        nullable=True,
+    )
 
     tema = db.relationship('Tema', foreign_keys=[tema_id], backref='tema_regras')
     regra = db.relationship('Regra', foreign_keys=[regra_id], backref='tema_regras')
     tema_alternativo = db.relationship(
         'Tema', foreign_keys=[tema_id_alternativo], backref='tema_regra_alternativas'
+    )
+    alternativa = db.relationship(
+        'TemaRegra',
+        remote_side=[id],
+        backref='variacoes',
+        foreign_keys=[alternativa_id],
     )
 
     def __repr__(self):
