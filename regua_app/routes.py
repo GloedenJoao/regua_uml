@@ -32,13 +32,38 @@ from sqlalchemy.orm import selectinload
 bp = Blueprint('routes', __name__)
 
 
+def ensure_regra_padrao() -> None:
+    """Garante que a regra padrão "Sem Regra" exista na base de dados."""
+    if not Regra.query.filter_by(descricao='Sem Regra').first():
+        regra_padrao = Regra(descricao='Sem Regra')
+        db.session.add(regra_padrao)
+        db.session.commit()
+
+
 @bp.route('/')
 def home():
     """Home page showing lists of all existing records and options to add new."""
-    temas = Tema.query.all()
-    regras = Regra.query.all()
-    temas_regras = TemaRegra.query.all()
-    dias = DiaComunicacao.query.all()
+    ensure_regra_padrao()
+    temas = Tema.query.order_by(Tema.nome).all()
+    regras = Regra.query.order_by(Regra.descricao).all()
+    temas_regras = (
+        TemaRegra.query.options(
+            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.regra),
+            selectinload(TemaRegra.alternativa).selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.alternativa).selectinload(TemaRegra.regra),
+        )
+        .order_by(TemaRegra.id)
+        .all()
+    )
+    dias = (
+        DiaComunicacao.query.options(
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema),
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.regra),
+        )
+        .order_by(DiaComunicacao.dia, DiaComunicacao.id)
+        .all()
+    )
     return render_template(
         'home.html',
         temas=temas,
@@ -65,7 +90,8 @@ def novo_tema():
         flash('Tema criado com sucesso!')
         return redirect(url_for('routes.home'))
 
-    return render_template('tema_form.html', tema=None)
+    temas = Tema.query.order_by(Tema.nome).all()
+    return render_template('tema_form.html', tema=None, temas=temas)
 
 
 @bp.route('/tema/<int:tema_id>/editar', methods=['GET', 'POST'])
@@ -79,7 +105,8 @@ def editar_tema(tema_id):
         db.session.commit()
         flash('Tema atualizado com sucesso!')
         return redirect(url_for('routes.home'))
-    return render_template('tema_form.html', tema=tema)
+    temas = Tema.query.order_by(Tema.nome).all()
+    return render_template('tema_form.html', tema=tema, temas=temas)
 
 
 @bp.route('/tema/<int:tema_id>/deletar', methods=['POST'])
@@ -95,6 +122,7 @@ def deletar_tema(tema_id):
 @bp.route('/regra/novo', methods=['GET', 'POST'])
 def novo_regra():
     """Create a new Regra."""
+    ensure_regra_padrao()
     if request.method == 'POST':
         descricao = request.form.get('descricao')
         regra = Regra(descricao=descricao)
@@ -102,19 +130,22 @@ def novo_regra():
         db.session.commit()
         flash('Regra criada com sucesso!')
         return redirect(url_for('routes.home'))
-    return render_template('regra_form.html', regra=None)
+    regras = Regra.query.order_by(Regra.descricao).all()
+    return render_template('regra_form.html', regra=None, regras=regras)
 
 
 @bp.route('/regra/<int:regra_id>/editar', methods=['GET', 'POST'])
 def editar_regra(regra_id):
     """Edit a Regra."""
     regra = Regra.query.get_or_404(regra_id)
+    ensure_regra_padrao()
     if request.method == 'POST':
         regra.descricao = request.form.get('descricao')
         db.session.commit()
         flash('Regra atualizada com sucesso!')
         return redirect(url_for('routes.home'))
-    return render_template('regra_form.html', regra=regra)
+    regras = Regra.query.order_by(Regra.descricao).all()
+    return render_template('regra_form.html', regra=regra, regras=regras)
 
 
 @bp.route('/regra/<int:regra_id>/deletar', methods=['POST'])
@@ -130,16 +161,19 @@ def deletar_regra(regra_id):
 @bp.route('/tema_regra/novo', methods=['GET', 'POST'])
 def novo_tema_regra():
     """Create a new TemaRegra linking a Tema and a Regra."""
-    temas = Tema.query.all()
-    regras = Regra.query.all()
-    tema_regra_opcoes = (
+    temas = Tema.query.order_by(Tema.nome).all()
+    regras = Regra.query.order_by(Regra.descricao).all()
+    tema_regra_lista = (
         TemaRegra.query.options(
             selectinload(TemaRegra.tema),
             selectinload(TemaRegra.regra),
+            selectinload(TemaRegra.alternativa).selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.alternativa).selectinload(TemaRegra.regra),
         )
         .order_by(TemaRegra.id)
         .all()
     )
+    preselected_tema_id = request.args.get('tema_id', type=int)
     if request.method == 'POST':
         tema_id = int(request.form.get('tema_id'))
         regra_id = int(request.form.get('regra_id'))
@@ -158,7 +192,9 @@ def novo_tema_regra():
         temas=temas,
         regras=regras,
         tema_regra=None,
-        tema_regra_opcoes=tema_regra_opcoes,
+        tema_regra_opcoes=tema_regra_lista,
+        tema_regra_lista=tema_regra_lista,
+        preselected_tema_id=preselected_tema_id,
     )
 
 
@@ -166,8 +202,18 @@ def novo_tema_regra():
 def editar_tema_regra(tr_id):
     """Edit a TemaRegra relationship."""
     tema_regra = TemaRegra.query.get_or_404(tr_id)
-    temas = Tema.query.all()
-    regras = Regra.query.all()
+    temas = Tema.query.order_by(Tema.nome).all()
+    regras = Regra.query.order_by(Regra.descricao).all()
+    tema_regra_lista = (
+        TemaRegra.query.options(
+            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.regra),
+            selectinload(TemaRegra.alternativa).selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.alternativa).selectinload(TemaRegra.regra),
+        )
+        .order_by(TemaRegra.id)
+        .all()
+    )
     tema_regra_opcoes = (
         TemaRegra.query.options(
             selectinload(TemaRegra.tema),
@@ -213,6 +259,8 @@ def editar_tema_regra(tr_id):
         regras=regras,
         tema_regra=tema_regra,
         tema_regra_opcoes=tema_regra_opcoes,
+        tema_regra_lista=tema_regra_lista,
+        preselected_tema_id=tema_regra.tema_id,
     )
 
 
@@ -228,7 +276,22 @@ def deletar_tema_regra(tr_id):
 
 @bp.route('/dia/novo', methods=['GET', 'POST'])
 def novo_dia():
-    tema_regras = TemaRegra.query.all()
+    tema_regras = (
+        TemaRegra.query.options(
+            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.regra),
+        )
+        .order_by(TemaRegra.id)
+        .all()
+    )
+    dias_existentes = (
+        DiaComunicacao.query.options(
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema),
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.regra),
+        )
+        .order_by(DiaComunicacao.dia, DiaComunicacao.id)
+        .all()
+    )
     if request.method == 'POST':
         dia = int(request.form['dia'])
         tr_id = int(request.form['tr_id'])
@@ -248,21 +311,46 @@ def novo_dia():
         db.session.commit()
         flash('Dia de comunicação adicionado com sucesso!')
         return redirect(url_for('routes.home'))
-    return render_template('dia_form.html', tema_regras=tema_regras, dia=None)
+    return render_template(
+        'dia_form.html',
+        tema_regras=tema_regras,
+        dia=None,
+        dias=dias_existentes,
+    )
 
 
 @bp.route('/dia/<int:dia_id>/editar', methods=['GET', 'POST'])
 def editar_dia(dia_id):
     """Edit an existing DiaComunicacao."""
     dia = DiaComunicacao.query.get_or_404(dia_id)
-    tema_regras = TemaRegra.query.all()
+    tema_regras = (
+        TemaRegra.query.options(
+            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.regra),
+        )
+        .order_by(TemaRegra.id)
+        .all()
+    )
+    dias_existentes = (
+        DiaComunicacao.query.options(
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema),
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.regra),
+        )
+        .order_by(DiaComunicacao.dia, DiaComunicacao.id)
+        .all()
+    )
     if request.method == 'POST':
         dia.dia = int(request.form.get('dia'))
         dia.tema_regra_id = int(request.form.get('tr_id'))
         db.session.commit()
         flash('Dia atualizado com sucesso!')
         return redirect(url_for('routes.home'))
-    return render_template('dia_form.html', tema_regras=tema_regras, dia=dia)
+    return render_template(
+        'dia_form.html',
+        tema_regras=tema_regras,
+        dia=dia,
+        dias=dias_existentes,
+    )
 
 
 @bp.route('/dia/<int:dia_id>/deletar', methods=['POST'])
