@@ -32,15 +32,6 @@
       rows="2"
     >{{ tema.objetivo if tema else '' }}</textarea>
   </div>
-  <div class="mb-3">
-    <label for="id_alternativo" class="form-label">Tema Alternativo (opcional)</label>
-    <select id="id_alternativo" name="id_alternativo" class="form-select">
-      <option value="">Nenhum</option>
-      {% for t in temas %}
-      <option value="{{ t.id }}" {% if tema and tema.id_alternativo == t.id %}selected{% endif %}>{{ t.nome }}</option>
-      {% endfor %}
-    </select>
-  </div>
   <button type="submit" class="btn btn-primary">Salvar</button>
   <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>
 </form>

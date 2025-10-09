@@ -11,7 +11,6 @@
       <th>Nome</th>
       <th>Descrição</th>
       <th>Objetivo</th>
-      <th>Comunicação alternativa</th>
       <th>Ações</th>
     </tr>
   </thead>
@@ -22,7 +21,6 @@
       <td>{{ t.nome }}</td>
       <td>{{ t.descricao }}</td>
       <td>{{ t.objetivo }}</td>
-      <td>{% if t.alternativo %}{{ t.alternativo.nome }}{% endif %}</td>
       <td>
         <a class="btn btn-sm btn-outline-primary" href="{{ url_for('routes.editar_tema', tema_id=t.id) }}">Editar</a>
         <form action="{{ url_for('routes.deletar_tema', tema_id=t.id) }}" method="post" class="d-inline" onsubmit="return confirm('Excluir tema? Esta ação removerá vínculos e dias relacionados.');">
