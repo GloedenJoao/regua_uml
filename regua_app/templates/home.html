@@ -50,6 +50,7 @@
                 <td class="text-end">
                   <div class="btn-group btn-group-sm" role="group">
                     <a class="btn btn-outline-primary" href="{{ url_for('routes.editar_tema', tema_id=t.id) }}"><i class="fa-solid fa-pen"></i></a>
+                    <a class="btn btn-gold" href="{{ url_for('routes.novo_tema_regra', tema_id=t.id) }}"><i class="fa-solid fa-plus"></i> Comunicação</a>
                     <form action="{{ url_for('routes.deletar_tema', tema_id=t.id) }}" method="post" class="m-0" onsubmit="return confirm('Excluir tema? Esta ação removerá vínculos e dias relacionados.');">
                       <button type="submit" class="btn btn-outline-danger"><i class="fa-solid fa-trash"></i></button>
                     </form>
