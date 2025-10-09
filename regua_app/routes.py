@@ -55,20 +55,17 @@ def novo_tema():
         nome = request.form.get('nome')
         descricao = request.form.get('descricao')
         objetivo = request.form.get('objetivo')
-        id_alternativo = request.form.get('id_alternativo') or None
         tema = Tema(
             nome=nome,
             descricao=descricao,
             objetivo=objetivo,
-            id_alternativo=int(id_alternativo) if id_alternativo else None,
         )
         db.session.add(tema)
         db.session.commit()
         flash('Tema criado com sucesso!')
         return redirect(url_for('routes.home'))
 
-    temas_existentes = Tema.query.all()
-    return render_template('tema_form.html', temas=temas_existentes, tema=None)
+    return render_template('tema_form.html', tema=None)
 
 
 @bp.route('/tema/<int:tema_id>/editar', methods=['GET', 'POST'])
@@ -79,13 +76,10 @@ def editar_tema(tema_id):
         tema.nome = request.form.get('nome')
         tema.descricao = request.form.get('descricao')
         tema.objetivo = request.form.get('objetivo')
-        id_alternativo = request.form.get('id_alternativo') or None
-        tema.id_alternativo = int(id_alternativo) if id_alternativo else None
         db.session.commit()
         flash('Tema atualizado com sucesso!')
         return redirect(url_for('routes.home'))
-    temas_existentes = Tema.query.filter(Tema.id != tema_id).all()
-    return render_template('tema_form.html', temas=temas_existentes, tema=tema)
+    return render_template('tema_form.html', tema=tema)
 
 
 @bp.route('/tema/<int:tema_id>/deletar', methods=['POST'])
