@@ -138,23 +138,33 @@ def novo_tema_regra():
     """Create a new TemaRegra linking a Tema and a Regra."""
     temas = Tema.query.all()
     regras = Regra.query.all()
+    tema_regra_opcoes = (
+        TemaRegra.query.options(
+            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.regra),
+        )
+        .order_by(TemaRegra.id)
+        .all()
+    )
     if request.method == 'POST':
         tema_id = int(request.form.get('tema_id'))
         regra_id = int(request.form.get('regra_id'))
-        tema_id_alternativo = request.form.get('tema_id_alternativo') or None
+        alternativa_id = request.form.get('alternativa_id') or None
         tr = TemaRegra(
             tema_id=tema_id,
             regra_id=regra_id,
-            tema_id_alternativo=int(tema_id_alternativo)
-            if tema_id_alternativo
-            else None,
+            alternativa_id=int(alternativa_id) if alternativa_id else None,
         )
         db.session.add(tr)
         db.session.commit()
         flash('Vínculo Tema–Regra criado com sucesso!')
         return redirect(url_for('routes.home'))
     return render_template(
-        'tema_regra_form.html', temas=temas, regras=regras, tema_regra=None
+        'tema_regra_form.html',
+        temas=temas,
+        regras=regras,
+        tema_regra=None,
+        tema_regra_opcoes=tema_regra_opcoes,
     )
 
 
@@ -164,18 +174,51 @@ def editar_tema_regra(tr_id):
     tema_regra = TemaRegra.query.get_or_404(tr_id)
     temas = Tema.query.all()
     regras = Regra.query.all()
+    tema_regra_opcoes = (
+        TemaRegra.query.options(
+            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.regra),
+        )
+        .filter(TemaRegra.id != tr_id)
+        .order_by(TemaRegra.id)
+        .all()
+    )
     if request.method == 'POST':
         tema_regra.tema_id = int(request.form.get('tema_id'))
         tema_regra.regra_id = int(request.form.get('regra_id'))
-        tema_id_alternativo = request.form.get('tema_id_alternativo') or None
-        tema_regra.tema_id_alternativo = (
-            int(tema_id_alternativo) if tema_id_alternativo else None
-        )
+        alternativa_id = request.form.get('alternativa_id') or None
+        if alternativa_id:
+            alternativa_id = int(alternativa_id)
+            # Evita ciclos ao selecionar como alternativa um vínculo
+            # que já depende deste registro.
+            corrente = TemaRegra.query.get(alternativa_id)
+            visitados = {tema_regra.id}
+            while corrente and corrente.alternativa_id:
+                if corrente.alternativa_id in visitados:
+                    flash(
+                        'A comunicação alternativa selecionada gera um ciclo. '
+                        'Escolha outro vínculo.',
+                        'warning',
+                    )
+                    return render_template(
+                        'tema_regra_form.html',
+                        temas=temas,
+                        regras=regras,
+                        tema_regra=tema_regra,
+                        tema_regra_opcoes=tema_regra_opcoes,
+                    )
+                visitados.add(corrente.alternativa_id)
+                corrente = TemaRegra.query.get(corrente.alternativa_id)
+        tema_regra.alternativa_id = alternativa_id
         db.session.commit()
         flash('Vínculo Tema–Regra atualizado com sucesso!')
         return redirect(url_for('routes.home'))
     return render_template(
-        'tema_regra_form.html', temas=temas, regras=regras, tema_regra=tema_regra
+        'tema_regra_form.html',
+        temas=temas,
+        regras=regras,
+        tema_regra=tema_regra,
+        tema_regra_opcoes=tema_regra_opcoes,
     )
 
 
@@ -203,7 +246,9 @@ def novo_dia():
             tema_id=tr.tema_id,
             tema_nome=tr.tema.nome,
             regra_id=tr.regra_id,
-            tema_id_alternativo=tr.tema_id_alternativo
+            tema_id_alternativo=(
+                tr.alternativa.tema_id if getattr(tr, 'alternativa', None) else None
+            ),
         )
         db.session.add(dc)
         db.session.commit()
@@ -238,95 +283,133 @@ def deletar_dia(dia_id):
 
 from .models import DiaComunicacao, TemaRegra
 
+
 def gerar_diagrama_mermaid() -> str:
-    """
-    Gera o Mermaid (flowchart LR) mantendo os DIAS alinhados no topo:
-      1) Declara todos os nós de dia (D0..Dn).
-      2) Conecta D0 --> D1 --> ... --> Dn (isso ancora a 'linha' dos dias).
-      3) Para cada dia, adiciona decisão (se houver alternativo) e/ou tema(s),
-         ligando SEMPRE para baixo a partir de Dn (sem voltar para a cadeia de dias).
-    """
+    """Monta o código Mermaid (flowchart LR) com cadeia de alternativas."""
     from sqlalchemy.orm import selectinload
-    from .models import DiaComunicacao, TemaRegra
+
+    # Todos os vínculos Tema–Regra para facilitar a navegação pelas alternativas
+    tema_regra_map = {
+        tr.id: tr
+        for tr in (
+            TemaRegra.query.options(
+                selectinload(TemaRegra.tema),
+                selectinload(TemaRegra.regra),
+            ).all()
+        )
+    }
 
     dias = (
-        DiaComunicacao.query
-        .options(
-            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema),
-            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.regra),
-            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema_alternativo),
-        )
+        DiaComunicacao.query.options(selectinload(DiaComunicacao.tema_regra))
+        .order_by(DiaComunicacao.dia, DiaComunicacao.id)
         .all()
     )
 
-    # if not dias:
-    #     return 'flowchart LR\n    D0["Sem dias cadastrados"] --> END\n    END(Fim)'
-
-    # Agrupa por dia
     por_dia = {}
     for d in dias:
         por_dia.setdefault(d.dia, []).append(d)
 
     ordered_days = sorted(por_dia.keys())
-    lines = []
-    lines.append("flowchart LR")
+    if not ordered_days:
+        return "flowchart LR\n    D0[\"Sem dias cadastrados\"]"
 
-    # 1) Declarar todos os nós de dia primeiro (ancora no topo visual)
+    def sanitize(texto: str, default: str) -> str:
+        texto = (texto or '').strip()
+        if not texto:
+            texto = default
+        texto = texto.replace('"', "'").replace('\n', '<br/>')
+        return texto
+
+    def regra_para_decisao(texto: str) -> str:
+        texto = sanitize(texto, 'Regra')
+        if not texto.endswith('?'):
+            texto = f"{texto}?"
+        return texto
+
+    def cadeia_alternativas(tr_inicial):
+        cadeia = []
+        visitados = set()
+        corrente = tr_inicial
+        while corrente and corrente.id not in visitados:
+            visitados.add(corrente.id)
+            cadeia.append(corrente)
+            prox_id = getattr(corrente, 'alternativa_id', None)
+            if prox_id:
+                corrente = tema_regra_map.get(prox_id)
+            else:
+                corrente = None
+        return cadeia
+
+    lines = ["flowchart LR"]
+
     for n in ordered_days:
         lines.append(f'    D{n}["Dia {n}"]')
 
-    # 2) Conectar a série histórica dos dias
     for i in range(len(ordered_days) - 1):
         a, b = ordered_days[i], ordered_days[i + 1]
         lines.append(f'    D{a} --> D{b}')
 
-    # 3) Para cada dia, acrescentar decisões/temas somente para "baixo"
-    for n in ordered_days:
-        blocos = por_dia[n]
-        for idx, d in enumerate(blocos, start=1):
-            tema_principal = (
-                (d.tema_nome or "").strip()
-                or (d.tema_regra.tema.nome.strip()
-                    if d.tema_regra and d.tema_regra.tema and d.tema_regra.tema.nome
-                    else "Tema")
-            )
+    for dia_valor in ordered_days:
+        blocos = por_dia[dia_valor]
+        for idx, registro in enumerate(blocos, start=1):
+            tema_regra = tema_regra_map.get(registro.tema_regra_id)
+            if not tema_regra:
+                continue
 
-            # Existe alternativo?
-            tem_alt = bool(d.tema_regra and d.tema_regra.tema_alternativo)
+            cadeia = cadeia_alternativas(tema_regra)
+            if not cadeia:
+                continue
 
-            if tem_alt:
-                regra_desc = (
-                    (d.tema_regra.regra.descricao or "").strip()
-                    if d.tema_regra and d.tema_regra.regra else "Regra"
+            etapas = []
+            for nivel, etapa in enumerate(cadeia):
+                tema_label = sanitize(
+                    etapa.tema.nome if etapa.tema else registro.tema_nome,
+                    'Tema',
                 )
-                tema_alt = (
-                    d.tema_regra.tema_alternativo.nome.strip()
-                    if d.tema_regra.tema_alternativo and d.tema_regra.tema_alternativo.nome
-                    else "Alternativo"
+                regra_label = sanitize(
+                    etapa.regra.descricao if etapa.regra else '',
+                    '',
+                )
+                has_rule = bool(regra_label) and regra_label.lower() not in {
+                    'sem regra',
+                }
+                entry_id = f'ST{dia_valor}_{idx}_{nivel}_ENTRY'
+                msg_id = f'ST{dia_valor}_{idx}_{nivel}_MSG'
+                if not has_rule:
+                    entry_id = msg_id
+                etapas.append(
+                    {
+                        'nivel': nivel,
+                        'entry_id': entry_id,
+                        'msg_id': msg_id,
+                        'tema': tema_label,
+                        'regra': regra_label,
+                        'has_rule': has_rule,
+                    }
                 )
 
-                dec_id  = f"DEC{n}_{idx}"
-                tpri_id = f"T{n}_{idx}_P"
-                talt_id = f"T{n}_{idx}_A"
+            for etapa in etapas:
+                if etapa['has_rule']:
+                    lines.append(
+                        f'    {etapa["entry_id"]}{{"{regra_para_decisao(etapa["regra"])}"}}'
+                    )
+                lines.append(f'    {etapa["msg_id"]}["{etapa["tema"]}"]')
 
-                # Declarar nós adicionais após a cadeia de dias
-                lines.append(f'    {dec_id}{{"{regra_desc}?"}}')
-                lines.append(f'    {tpri_id}["{tema_principal}"]')
-                lines.append(f'    {talt_id}["{tema_alt}"]')
-
-                # Conectar a partir de D{n} para baixo
-                lines.append(f'    D{n} --> {dec_id}')
-                lines.append(f'    {dec_id} -->|Sim| {tpri_id}')
-                lines.append(f'    {dec_id} -->|Não| {talt_id}')
-
-            else:
-                tpri_id = f"T{n}_{idx}_P"
-                lines.append(f'    {tpri_id}["{tema_principal}"]')
-                lines.append(f'    D{n} --> {tpri_id}')
-
-    # Nó final
-    # lines.append(f'    D{ordered_days[-1]} --> END')
-    # lines.append('    END(Fim)')
+            for pos, etapa in enumerate(etapas):
+                entry_id = etapa['entry_id']
+                msg_id = etapa['msg_id']
+                if etapa['has_rule']:
+                    if pos == 0:
+                        lines.append(f'    D{dia_valor} --> {entry_id}')
+                    lines.append(f'    {entry_id} -->|Sim| {msg_id}')
+                    if pos < len(etapas) - 1:
+                        prox_entry = etapas[pos + 1]['entry_id']
+                        lines.append(f'    {entry_id} -->|Não| {prox_entry}')
+                    else:
+                        lines.append(f'    {entry_id} -->|Não| {msg_id}')
+                else:
+                    if pos == 0:
+                        lines.append(f'    D{dia_valor} --> {msg_id}')
 
     return "\n".join(lines)
 

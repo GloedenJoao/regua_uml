@@ -11,7 +11,7 @@
       <th>Nome</th>
       <th>Descrição</th>
       <th>Objetivo</th>
-      <th>Alternativo</th>
+      <th>Comunicação alternativa</th>
       <th>Ações</th>
     </tr>
   </thead>
@@ -66,7 +66,7 @@
       <th>ID</th>
       <th>Tema</th>
       <th>Regra</th>
-      <th>Alternativo</th>
+      <th>Comunicação alternativa</th>
       <th>Ações</th>
     </tr>
   </thead>
@@ -76,7 +76,11 @@
       <td>{{ tr.id }}</td>
       <td>{{ tr.tema.nome }}</td>
       <td>{{ tr.regra.descricao }}</td>
-      <td>{% if tr.tema_alternativo %}{{ tr.tema_alternativo.nome }}{% endif %}</td>
+      <td>
+        {% if tr.alternativa %}
+        {{ tr.alternativa.tema.nome }} / {{ tr.alternativa.regra.descricao }}
+        {% endif %}
+      </td>
       <td>
         <a class="btn btn-sm btn-outline-primary" href="{{ url_for('routes.editar_tema_regra', tr_id=tr.id) }}">Editar</a>
         <form action="{{ url_for('routes.deletar_tema_regra', tr_id=tr.id) }}" method="post" class="d-inline" onsubmit="return confirm('Excluir vínculo? Esta ação removerá dias relacionados.');">
