@@ -1,41 +1,102 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>{% if tema_regra %}Editar Vínculo Tema–Regra{% else %}Novo Vínculo Tema–Regra{% endif %}</h2>
-<form method="post">
-  <div class="mb-3">
-    <label for="tema_id" class="form-label">Tema</label>
-    <select id="tema_id" name="tema_id" class="form-select" required>
-      {% for t in temas %}
-      <option value="{{ t.id }}"{% if tema_regra and tema_regra.tema_id == t.id %} selected{% endif %}>
-        {{ t.nome }}
-      </option>
-      {% endfor %}
-    </select>
+{% set selected_tema_id = tema_regra.tema_id if tema_regra else preselected_tema_id %}
+<div class="row g-4">
+  <div class="col-12 col-xl-5">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h2 class="mb-1">{% if tema_regra %}Editar Vínculo Tema–Regra{% else %}Novo Vínculo Tema–Regra{% endif %}</h2>
+        <p class="text-muted mb-0">Conecte um tema a uma regra e defina comunicações alternativas quando necessário.</p>
+      </div>
+      <span class="badge bg-light text-dark">{{ (tema_regra_lista|length) if tema_regra_lista is defined else 0 }} vínculos</span>
+    </div>
+    <form method="post" class="needs-validation" novalidate>
+      <div class="mb-3">
+        <label for="tema_id" class="form-label">Tema</label>
+        <select id="tema_id" name="tema_id" class="form-select" required>
+          {% for t in temas %}
+          <option value="{{ t.id }}"{% if selected_tema_id and selected_tema_id == t.id %} selected{% endif %}>
+            {{ t.nome }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label for="regra_id" class="form-label">Regra</label>
+        <select id="regra_id" name="regra_id" class="form-select" required>
+          {% for r in regras %}
+          <option value="{{ r.id }}"{% if tema_regra and tema_regra.regra_id == r.id %} selected{% endif %}>
+            {{ r.descricao }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label for="alternativa_id" class="form-label">Comunicação alternativa (opcional)</label>
+        <select id="alternativa_id" name="alternativa_id" class="form-select">
+          <option value="">Nenhuma</option>
+          {% for vinculo in tema_regra_opcoes %}
+          <option value="{{ vinculo.id }}"{% if tema_regra and tema_regra.alternativa_id == vinculo.id %} selected{% endif %}>
+            {{ vinculo.tema.nome }} — {{ vinculo.regra.descricao }}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Selecione um vínculo já cadastrado que será acionado como alternativa.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Salvar</button>
+        <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>
+      </div>
+    </form>
   </div>
-  <div class="mb-3">
-    <label for="regra_id" class="form-label">Regra</label>
-    <select id="regra_id" name="regra_id" class="form-select" required>
-      {% for r in regras %}
-      <option value="{{ r.id }}"{% if tema_regra and tema_regra.regra_id == r.id %} selected{% endif %}>
-        {{ r.descricao }}
-      </option>
-      {% endfor %}
-    </select>
+
+  <div class="col-12 col-xl-7">
+    <div class="h-100 p-4 border rounded-4 bg-light-subtle">
+      <h3 class="h5 d-flex align-items-center justify-content-between">
+        <span>Vínculos cadastrados</span>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('routes.home') }}">Voltar para visão geral</a>
+      </h3>
+      <p class="text-muted">Visualize rapidamente os vínculos existentes e como as alternativas estão configuradas.</p>
+      {% if tema_regra_lista %}
+      <div class="table-wrap">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th scope="col">ID</th>
+              <th scope="col">Tema</th>
+              <th scope="col">Regra</th>
+              <th scope="col">Alternativa</th>
+              <th scope="col" class="text-end">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in tema_regra_lista %}
+            <tr>
+              <td><span class="badge badge-id">#{{ item.id }}</span></td>
+              <td class="fw-semibold">{{ item.tema.nome }}</td>
+              <td class="text-muted">{{ item.regra.descricao }}</td>
+              <td>
+                {% if item.alternativa %}
+                <span class="badge bg-secondary-subtle text-dark">{{ item.alternativa.tema.nome }} / {{ item.alternativa.regra.descricao }}</span>
+                {% else %}
+                <span class="text-muted">Nenhuma</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm" role="group">
+                  <a class="btn btn-outline-primary" href="{{ url_for('routes.editar_tema_regra', tr_id=item.id) }}"><i class="fa-solid fa-pen"></i></a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">Nenhum vínculo cadastrado até o momento.</p>
+      {% endif %}
+    </div>
   </div>
-  <div class="mb-3">
-    <label for="alternativa_id" class="form-label">Comunicação alternativa (opcional)</label>
-    <select id="alternativa_id" name="alternativa_id" class="form-select">
-      <option value="">Nenhuma</option>
-      {% for vinculo in tema_regra_opcoes %}
-      <option value="{{ vinculo.id }}"{% if tema_regra and tema_regra.alternativa_id == vinculo.id %} selected{% endif %}>
-        {{ vinculo.tema.nome }} — {{ vinculo.regra.descricao }}
-      </option>
-      {% endfor %}
-    </select>
-    <div class="form-text">Selecione um Tema + Regra já cadastrado que represente a comunicação alternativa.</div>
-  </div>
-  <button type="submit" class="btn btn-primary">Salvar</button>
-  <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>
-</form>
+</div>
 {% endblock %}

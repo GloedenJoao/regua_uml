@@ -1,19 +1,73 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>{% if regra %}Editar Regra{% else %}Nova Regra{% endif %}</h2>
-<form method="post">
-  <div class="mb-3">
-    <label for="descricao" class="form-label">Descrição</label>
-    <textarea
-      id="descricao"
-      name="descricao"
-      class="form-control"
-      rows="3"
-      required
-    >{{ regra.descricao if regra else '' }}</textarea>
+<div class="row g-4">
+  <div class="col-12 col-lg-5">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h2 class="mb-1">{% if regra %}Editar Regra{% else %}Nova Regra{% endif %}</h2>
+        <p class="text-muted mb-0">Crie regras para direcionar a cadência de comunicação dos temas.</p>
+      </div>
+      <span class="badge bg-light text-dark">{{ (regras|length) if regras is defined else 0 }} cadastradas</span>
+    </div>
+    <form method="post" class="needs-validation" novalidate>
+      <div class="mb-3">
+        <label for="descricao" class="form-label">Descrição da regra</label>
+        <textarea
+          id="descricao"
+          name="descricao"
+          class="form-control"
+          rows="4"
+          required
+        >{{ regra.descricao if regra else 'Sem Regra' }}</textarea>
+        <div class="form-text">A regra "Sem Regra" é sugerida como padrão para casos gerais.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Salvar</button>
+        <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>
+      </div>
+    </form>
   </div>
-  <button type="submit" class="btn btn-primary">Salvar</button>
-  <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>
-</form>
+
+  <div class="col-12 col-lg-7">
+    <div class="h-100 p-4 border rounded-4 bg-light-subtle">
+      <h3 class="h5 d-flex align-items-center justify-content-between">
+        <span>Regras cadastradas</span>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('routes.home') }}">Voltar para visão geral</a>
+      </h3>
+      <p class="text-muted">Utilize a regra "Sem Regra" para comunicações sem condição específica ou cadastre novas regras especializadas.</p>
+      {% if regras %}
+      <div class="table-wrap">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th scope="col">ID</th>
+              <th scope="col">Descrição</th>
+              <th scope="col" class="text-end">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in regras %}
+            <tr>
+              <td><span class="badge badge-id">#{{ item.id }}</span></td>
+              <td class="text-muted">{{ item.descricao }}</td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm" role="group">
+                  <a class="btn btn-outline-primary" href="{{ url_for('routes.editar_regra', regra_id=item.id) }}"><i class="fa-solid fa-pen"></i></a>
+                  <form action="{{ url_for('routes.deletar_regra', regra_id=item.id) }}" method="post" class="m-0" onsubmit="return confirm('Excluir regra? Esta ação removerá vínculos e dias relacionados.');">
+                    <button type="submit" class="btn btn-outline-danger"><i class="fa-solid fa-trash"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">Nenhuma regra cadastrada ainda.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
 {% endblock %}

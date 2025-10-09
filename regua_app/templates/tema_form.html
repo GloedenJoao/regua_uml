@@ -1,38 +1,91 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>{% if tema %}Editar Tema{% else %}Novo Tema{% endif %}</h2>
-<form method="post">
-  <div class="mb-3">
-    <label for="nome" class="form-label">Nome</label>
-    <input
-      type="text"
-      id="nome"
-      name="nome"
-      class="form-control"
-      required
-      value="{{ tema.nome if tema else '' }}"
-    />
+<div class="row g-4">
+  <div class="col-12 col-lg-5">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h2 class="mb-1">{% if tema %}Editar Tema{% else %}Novo Tema{% endif %}</h2>
+        <p class="text-muted mb-0">Preencha os detalhes do tema para organizar sua régua.</p>
+      </div>
+      <span class="badge bg-light text-dark">{{ (temas|length) if temas is defined else 0 }} cadastrados</span>
+    </div>
+    <form method="post" class="needs-validation" novalidate>
+      <div class="mb-3">
+        <label for="nome" class="form-label">Nome</label>
+        <input
+          type="text"
+          id="nome"
+          name="nome"
+          class="form-control"
+          required
+          value="{{ tema.nome if tema else '' }}"
+        />
+      </div>
+      <div class="mb-3">
+        <label for="descricao" class="form-label">Descrição</label>
+        <textarea
+          id="descricao"
+          name="descricao"
+          class="form-control"
+          rows="3"
+        >{{ tema.descricao if tema else '' }}</textarea>
+      </div>
+      <div class="mb-3">
+        <label for="objetivo" class="form-label">Objetivo</label>
+        <textarea
+          id="objetivo"
+          name="objetivo"
+          class="form-control"
+          rows="3"
+        >{{ tema.objetivo if tema else '' }}</textarea>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Salvar</button>
+        <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>
+      </div>
+    </form>
   </div>
-  <div class="mb-3">
-    <label for="descricao" class="form-label">Descrição</label>
-    <textarea
-      id="descricao"
-      name="descricao"
-      class="form-control"
-      rows="2"
-    >{{ tema.descricao if tema else '' }}</textarea>
+
+  <div class="col-12 col-lg-7">
+    <div class="h-100 p-4 border rounded-4 bg-light-subtle">
+      <h3 class="h5 d-flex align-items-center justify-content-between">
+        <span>Temas cadastrados</span>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('routes.home') }}">Voltar para visão geral</a>
+      </h3>
+      <p class="text-muted">Use a listagem para editar ou vincular rapidamente novos fluxos de comunicação.</p>
+      {% if temas %}
+      <div class="table-wrap">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th scope="col">ID</th>
+              <th scope="col">Nome</th>
+              <th scope="col">Objetivo</th>
+              <th scope="col" class="text-end">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in temas %}
+            <tr>
+              <td><span class="badge badge-id">#{{ item.id }}</span></td>
+              <td class="fw-semibold">{{ item.nome }}</td>
+              <td class="text-muted">{{ item.objetivo or '—' }}</td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm" role="group">
+                  <a class="btn btn-outline-primary" href="{{ url_for('routes.editar_tema', tema_id=item.id) }}"><i class="fa-solid fa-pen"></i></a>
+                  <a class="btn btn-gold" href="{{ url_for('routes.novo_tema_regra', tema_id=item.id) }}"><i class="fa-solid fa-plus"></i></a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">Nenhum tema cadastrado ainda.</p>
+      {% endif %}
+    </div>
   </div>
-  <div class="mb-3">
-    <label for="objetivo" class="form-label">Objetivo</label>
-    <textarea
-      id="objetivo"
-      name="objetivo"
-      class="form-control"
-      rows="2"
-    >{{ tema.objetivo if tema else '' }}</textarea>
-  </div>
-  <button type="submit" class="btn btn-primary">Salvar</button>
-  <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>
-</form>
+</div>
 {% endblock %}
