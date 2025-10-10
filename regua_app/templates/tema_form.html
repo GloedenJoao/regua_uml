@@ -40,6 +40,16 @@
           rows="3"
         >{{ tema.objetivo if tema else '' }}</textarea>
       </div>
+      <div class="mb-4">
+        <label for="jornada_id" class="form-label">Jornada (opcional)</label>
+        <select id="jornada_id" name="jornada_id" class="form-select">
+          <option value="">Nenhuma</option>
+          {% for jornada in jornadas %}
+          <option value="{{ jornada.id }}" {% if tema and tema.jornada_id == jornada.id %}selected{% endif %}>{{ jornada.nome }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">As jornadas ajudam a agrupar temas relacionados dentro da régua.</div>
+      </div>
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary">Salvar</button>
         <a href="{{ url_for('routes.home') }}" class="btn btn-secondary">Cancelar</a>
@@ -56,22 +66,24 @@
       <p class="text-muted">Use a listagem para editar ou vincular rapidamente novos fluxos de comunicação.</p>
       {% if temas %}
       <div class="table-wrap">
-        <table class="table table-hover align-middle">
-          <thead>
-            <tr>
-              <th scope="col">ID</th>
-              <th scope="col">Nome</th>
-              <th scope="col">Objetivo</th>
-              <th scope="col" class="text-end">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for item in temas %}
-            <tr>
-              <td><span class="badge badge-id">#{{ item.id }}</span></td>
-              <td class="fw-semibold">{{ item.nome }}</td>
-              <td class="text-muted">{{ item.objetivo or '—' }}</td>
-              <td class="text-end">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Nome</th>
+                <th scope="col">Objetivo</th>
+                <th scope="col">Jornada</th>
+                <th scope="col" class="text-end">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in temas %}
+              <tr>
+                <td><span class="badge badge-id">#{{ item.id }}</span></td>
+                <td class="fw-semibold">{{ item.nome }}</td>
+                <td class="text-muted">{{ item.objetivo or '—' }}</td>
+                <td class="text-muted">{{ item.jornada.nome if item.jornada else '—' }}</td>
+                <td class="text-end">
                 <div class="btn-group btn-group-sm" role="group">
                   <a class="btn btn-outline-primary" href="{{ url_for('routes.editar_tema', tema_id=item.id) }}"><i class="fa-solid fa-pen"></i></a>
                   <a class="btn btn-gold" href="{{ url_for('routes.novo_tema_regra', tema_id=item.id) }}"><i class="fa-solid fa-plus"></i></a>

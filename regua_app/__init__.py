@@ -49,5 +49,76 @@ def create_app():
     # Create database tables if they do not exist
     with app.app_context():
         db.create_all()
+        _ensure_schema()
 
     return app
+
+
+def _ensure_schema() -> None:
+    """Garante colunas adicionadas em versões posteriores sem precisar de migração."""
+
+    from sqlalchemy import text
+    from sqlalchemy.orm import selectinload
+    from .models import DiaComunicacao, TemaRegra, Tema
+
+    engine = db.get_engine()
+
+    def coluna_existe(tabela: str, coluna: str) -> bool:
+        with engine.connect() as conn:
+            info = conn.execute(text(f"PRAGMA table_info('{tabela}')")).fetchall()
+        return any(linha[1] == coluna for linha in info)
+
+    alter_statements = []
+    if not coluna_existe('temas', 'jornada_id'):
+        alter_statements.append(
+            "ALTER TABLE temas ADD COLUMN jornada_id INTEGER REFERENCES jornadas(id) ON DELETE SET NULL"
+        )
+    if not coluna_existe('dias_comunicacoes', 'jornada_id'):
+        alter_statements.append("ALTER TABLE dias_comunicacoes ADD COLUMN jornada_id INTEGER")
+    if not coluna_existe('dias_comunicacoes', 'jornada_nome'):
+        alter_statements.append("ALTER TABLE dias_comunicacoes ADD COLUMN jornada_nome VARCHAR(120)")
+
+    if alter_statements:
+        with engine.begin() as conn:
+            for comando in alter_statements:
+                conn.execute(text(comando))
+
+    dias = (
+        DiaComunicacao.query.options(
+            selectinload(DiaComunicacao.tema_regra)
+            .selectinload(TemaRegra.tema)
+            .selectinload(Tema.jornada),
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.alternativa),
+            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.regra),
+        ).all()
+    )
+    alterado = False
+    for dia in dias:
+        tema_regra = dia.tema_regra
+        tema = tema_regra.tema if tema_regra else None
+        if tema:
+            if dia.tema_id != tema.id:
+                dia.tema_id = tema.id
+                alterado = True
+            if dia.tema_nome != (tema.nome or dia.tema_nome):
+                dia.tema_nome = tema.nome or dia.tema_nome
+                alterado = True
+            jornada = tema.jornada
+            jornada_id = jornada.id if jornada else None
+            jornada_nome = jornada.nome if jornada else None
+            if dia.jornada_id != jornada_id or dia.jornada_nome != jornada_nome:
+                dia.jornada_id = jornada_id
+                dia.jornada_nome = jornada_nome
+                alterado = True
+        if tema_regra:
+            alternativa = tema_regra.alternativa
+            alt_tema_id = alternativa.tema_id if alternativa else None
+            if dia.tema_id_alternativo != alt_tema_id:
+                dia.tema_id_alternativo = alt_tema_id
+                alterado = True
+            if dia.regra_id != tema_regra.regra_id:
+                dia.regra_id = tema_regra.regra_id
+                alterado = True
+
+    if alterado:
+        db.session.commit()
