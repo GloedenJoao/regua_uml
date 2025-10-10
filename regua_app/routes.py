@@ -635,6 +635,20 @@ def gerar_diagrama_mermaid() -> str:
     fim_node_id = f"D{fim_dia_valor}"
     day_nodes = []
     decision_nodes = []
+    journey_node_assignments: set[tuple[str, str]] = set()
+    journey_styles: dict[str | int | None, dict[str, str]] = {}
+    legend_nodes: list[tuple[str, str]] = []
+    journey_palette = [
+        ("#FDE68A", "#B45309"),
+        ("#BBF7D0", "#047857"),
+        ("#BFDBFE", "#1D4ED8"),
+        ("#FBCFE8", "#BE185D"),
+        ("#DDD6FE", "#6D28D9"),
+        ("#FECACA", "#B91C1C"),
+        ("#A5F3FC", "#0E7490"),
+        ("#F5D0C5", "#9A3412"),
+    ]
+    palette_index = 0
 
     if not ordered_days:
         lines = [
@@ -674,6 +688,34 @@ def gerar_diagrama_mermaid() -> str:
                 corrente = None
         return cadeia
 
+    def registrar_jornada(jornada_id: int | None, jornada_nome: str | None) -> dict[str, str]:
+        nonlocal palette_index
+
+        chave = jornada_id if jornada_id is not None else '__sem_jornada__'
+        if chave in journey_styles:
+            return journey_styles[chave]
+
+        if jornada_id is None:
+            fill, stroke = '#E5E7EB', '#6B7280'
+            label = sanitize(jornada_nome or '', 'Sem Jornada')
+            class_name = 'journey_sem'
+            legend_id = 'LEG_SEM_JORNADA'
+        else:
+            fill, stroke = journey_palette[palette_index % len(journey_palette)]
+            palette_index += 1
+            label = sanitize(jornada_nome or '', f'Jornada {jornada_id}')
+            class_name = f'journey_{jornada_id}'
+            legend_id = f'LEG_J{jornada_id}'
+
+        journey_styles[chave] = {
+            'class_name': class_name,
+            'fill': fill,
+            'stroke': stroke,
+            'label': label,
+            'legend_id': legend_id,
+        }
+        return journey_styles[chave]
+
     lines = ["flowchart LR"]
 
     for n in ordered_days:
@@ -708,20 +750,26 @@ def gerar_diagrama_mermaid() -> str:
                     etapa.tema.nome if etapa.tema else registro.tema_nome,
                     'Tema',
                 )
-                jornada_label = sanitize(
-                    (
-                        etapa.tema.jornada.nome
-                        if etapa.tema and getattr(etapa.tema, 'jornada', None)
-                        else registro.jornada_nome
-                    ),
-                    '',
+                jornada_obj = (
+                    etapa.tema.jornada
+                    if etapa.tema and getattr(etapa.tema, 'jornada', None)
+                    else None
                 )
+                jornada_id = (
+                    jornada_obj.id
+                    if jornada_obj is not None
+                    else (registro.jornada_id if registro.jornada_id else None)
+                )
+                jornada_nome = (
+                    jornada_obj.nome
+                    if jornada_obj is not None
+                    else registro.jornada_nome
+                )
+                journey_info = registrar_jornada(jornada_id, jornada_nome)
                 regra_label = sanitize(
                     etapa.regra.descricao if etapa.regra else '',
                     '',
                 )
-                if jornada_label:
-                    tema_label = f"{tema_label}<br/>Jornada: {jornada_label}"
                 has_rule = bool(regra_label) and regra_label.lower() not in {
                     'sem regra',
                 }
@@ -737,6 +785,7 @@ def gerar_diagrama_mermaid() -> str:
                         'tema': tema_label,
                         'regra': regra_label,
                         'has_rule': has_rule,
+                        'journey_class': journey_info['class_name'],
                     }
                 )
 
@@ -748,6 +797,9 @@ def gerar_diagrama_mermaid() -> str:
                     )
                     decision_nodes.append(entry_id)
                 lines.append(f'    {etapa["msg_id"]}["{etapa["tema"]}"]')
+                journey_node_assignments.add(
+                    (etapa['msg_id'], etapa['journey_class'])
+                )
 
             for pos, etapa in enumerate(etapas):
                 entry_id = etapa['entry_id']
@@ -765,6 +817,13 @@ def gerar_diagrama_mermaid() -> str:
                     if pos == 0:
                         lines.append(f'    D{dia_valor} --> {msg_id}')
 
+    if journey_styles:
+        for info in journey_styles.values():
+            lines.append(
+                f"    classDef {info['class_name']} fill:{info['fill']},stroke:{info['stroke']},"
+                "color:#1F2937,stroke-width:2px;"
+            )
+
     if day_nodes:
         lines.append('    classDef dia fill:#FFF3CD,stroke:#C77D00,stroke-width:2px,rx:8,ry:8;')
         lines.append(f"    class {','.join(day_nodes)} dia")
@@ -772,6 +831,19 @@ def gerar_diagrama_mermaid() -> str:
     if decision_nodes:
         lines.append('    classDef decisao fill:#E2F0FF,stroke:#0F5DA3,stroke-width:2px;')
         lines.append(f"    class {','.join(decision_nodes)} decisao")
+
+    if journey_styles:
+        lines.append('    subgraph legend [Legenda de Jornadas]')
+        lines.append('        direction TB')
+        for info in journey_styles.values():
+            legend_nodes.append((info['legend_id'], info['class_name']))
+            lines.append(f'        {info["legend_id"]}["{info["label"]}"]')
+        lines.append('    end')
+
+        for node_id, class_name in sorted(journey_node_assignments):
+            lines.append(f'    class {node_id} {class_name}')
+        for node_id, class_name in legend_nodes:
+            lines.append(f'    class {node_id} {class_name}')
 
     return "\n".join(lines)
 
