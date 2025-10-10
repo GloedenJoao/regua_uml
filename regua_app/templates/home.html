@@ -8,6 +8,7 @@
   </div>
   <div class="btn-toolbar" role="toolbar">
     <div class="btn-group me-2">
+      <a class="btn btn-primary" href="{{ url_for('routes.nova_jornada') }}"><i class="fa-solid fa-route me-2"></i>Nova Jornada</a>
       <a class="btn btn-primary" href="{{ url_for('routes.novo_tema') }}"><i class="fa-solid fa-book-medical me-2"></i>Novo Tema</a>
       <a class="btn btn-primary" href="{{ url_for('routes.novo_regra') }}"><i class="fa-solid fa-gavel me-2"></i>Nova Regra</a>
     </div>
@@ -20,13 +21,61 @@
 
 <div class="accordion" id="overviewAccordion">
   <div class="accordion-item border-0 shadow-sm rounded-4 mb-3">
+    <h2 class="accordion-header" id="headingJornadas">
+      <button class="accordion-button fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#jornadasCollapse" aria-expanded="true" aria-controls="jornadasCollapse">
+        <i class="fa-solid fa-route me-2 text-primary"></i>
+        Jornadas cadastradas <span class="badge bg-light text-dark ms-2">{{ jornadas|length }}</span>
+      </button>
+    </h2>
+    <div id="jornadasCollapse" class="accordion-collapse collapse show" aria-labelledby="headingJornadas" data-bs-parent="#overviewAccordion">
+      <div class="accordion-body">
+        {% if jornadas %}
+        <div class="table-wrap">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Nome</th>
+                <th scope="col">Descrição</th>
+                <th scope="col">Temas vinculados</th>
+                <th scope="col" class="text-end">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for j in jornadas %}
+              <tr>
+                <td><span class="badge badge-id">#{{ j.id }}</span></td>
+                <td class="fw-semibold">{{ j.nome }}</td>
+                <td class="text-muted">{{ j.descricao or '—' }}</td>
+                <td class="text-muted">{{ j.temas|length }}</td>
+                <td class="text-end">
+                  <div class="btn-group btn-group-sm" role="group">
+                    <a class="btn btn-outline-primary" href="{{ url_for('routes.editar_jornada', jornada_id=j.id) }}"><i class="fa-solid fa-pen"></i></a>
+                    <form action="{{ url_for('routes.deletar_jornada', jornada_id=j.id) }}" method="post" class="m-0" onsubmit="return confirm('Excluir jornada? Temas permanecerão cadastrados, mas sem jornada associada.');">
+                      <button type="submit" class="btn btn-outline-danger"><i class="fa-solid fa-trash"></i></button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">Nenhuma jornada cadastrada até o momento.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="accordion-item border-0 shadow-sm rounded-4 mb-3">
     <h2 class="accordion-header" id="headingTemas">
-      <button class="accordion-button fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#temasCollapse" aria-expanded="true" aria-controls="temasCollapse">
+      <button class="accordion-button fw-semibold collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#temasCollapse" aria-expanded="false" aria-controls="temasCollapse">
         <i class="fa-solid fa-book-open me-2 text-primary"></i>
         Temas cadastrados <span class="badge bg-light text-dark ms-2">{{ temas|length }}</span>
       </button>
     </h2>
-    <div id="temasCollapse" class="accordion-collapse collapse show" aria-labelledby="headingTemas" data-bs-parent="#overviewAccordion">
+    <div id="temasCollapse" class="accordion-collapse collapse" aria-labelledby="headingTemas" data-bs-parent="#overviewAccordion">
       <div class="accordion-body">
         {% if temas %}
         <div class="table-wrap">
@@ -35,6 +84,7 @@
               <tr>
                 <th scope="col">ID</th>
                 <th scope="col">Nome</th>
+                <th scope="col">Jornada</th>
                 <th scope="col">Descrição</th>
                 <th scope="col">Objetivo</th>
                 <th scope="col" class="text-end">Ações</th>
@@ -45,6 +95,7 @@
               <tr>
                 <td><span class="badge badge-id">#{{ t.id }}</span></td>
                 <td class="fw-semibold">{{ t.nome }}</td>
+                <td class="text-muted">{{ t.jornada.nome if t.jornada else '—' }}</td>
                 <td class="text-muted">{{ t.descricao or '—' }}</td>
                 <td class="text-muted">{{ t.objetivo or '—' }}</td>
                 <td class="text-end">
@@ -127,6 +178,7 @@
               <tr>
                 <th scope="col">ID</th>
                 <th scope="col">Tema</th>
+                <th scope="col">Jornada</th>
                 <th scope="col">Regra</th>
                 <th scope="col">Comunicação alternativa</th>
                 <th scope="col" class="text-end">Ações</th>
@@ -137,6 +189,7 @@
               <tr>
                 <td><span class="badge badge-id">#{{ tr.id }}</span></td>
                 <td class="fw-semibold">{{ tr.tema.nome }}</td>
+                <td class="text-muted">{{ tr.tema.jornada.nome if tr.tema and tr.tema.jornada else '—' }}</td>
                 <td class="text-muted">{{ tr.regra.descricao }}</td>
                 <td>
                   {% if tr.alternativa %}
@@ -182,6 +235,7 @@
                 <th scope="col">ID</th>
                 <th scope="col">Dia</th>
                 <th scope="col">Vínculo Tema–Regra</th>
+                <th scope="col">Jornada</th>
                 <th scope="col" class="text-end">Ações</th>
               </tr>
             </thead>
@@ -191,6 +245,15 @@
                 <td><span class="badge badge-id">#{{ d.id }}</span></td>
                 <td class="fw-semibold">Dia {{ d.dia }}</td>
                 <td class="text-muted">{{ d.tema_regra.tema.nome }} / {{ d.tema_regra.regra.descricao }}</td>
+                <td class="text-muted">
+                  {% if d.tema_regra.tema.jornada %}
+                    {{ d.tema_regra.tema.jornada.nome }}
+                  {% elif d.jornada_nome %}
+                    {{ d.jornada_nome }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
                 <td class="text-end">
                   <div class="btn-group btn-group-sm" role="group">
                     <a class="btn btn-outline-primary" href="{{ url_for('routes.editar_dia', dia_id=d.id) }}"><i class="fa-solid fa-pen"></i></a>

@@ -17,12 +17,29 @@ listing dependents.
 from . import db
 
 
+class Jornada(db.Model):
+    __tablename__ = 'jornadas'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False)
+    descricao = db.Column(db.Text, nullable=True)
+
+    temas = db.relationship('Tema', back_populates='jornada')
+
+    def __repr__(self):
+        return f"<Jornada {self.id}: {self.nome}>"
+
+
 class Tema(db.Model):
     __tablename__ = 'temas'
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
     descricao = db.Column(db.Text, nullable=True)
     objetivo = db.Column(db.Text, nullable=True)
+    jornada_id = db.Column(
+        db.Integer,
+        db.ForeignKey('jornadas.id', ondelete='SET NULL'),
+        nullable=True,
+    )
     id_alternativo = db.Column(
         db.Integer,
         db.ForeignKey('temas.id', ondelete='SET NULL'),
@@ -32,6 +49,7 @@ class Tema(db.Model):
     # Relationship to the alternative theme. Use remote_side so SQLAlchemy can
     # distinguish between the parent and child in a self‑referential relationship.
     alternativo = db.relationship('Tema', remote_side=[id], backref='variacoes')
+    jornada = db.relationship('Jornada', back_populates='temas')
 
     def __repr__(self):
         return f"<Tema {self.id}: {self.nome}>"
@@ -103,6 +121,8 @@ class DiaComunicacao(db.Model):
     tema_nome = db.Column(db.String(100), nullable=False)
     regra_id = db.Column(db.Integer, nullable=False)
     tema_id_alternativo = db.Column(db.Integer, nullable=True)
+    jornada_id = db.Column(db.Integer, nullable=True)
+    jornada_nome = db.Column(db.String(120), nullable=True)
 
 
     def __repr__(self):

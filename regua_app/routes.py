@@ -25,7 +25,7 @@ from flask import (
     Response
 )
 from . import db
-from .models import Tema, Regra, TemaRegra, DiaComunicacao
+from .models import Jornada, Tema, Regra, TemaRegra, DiaComunicacao
 from sqlalchemy.orm import selectinload
 
 
@@ -77,17 +77,76 @@ def _limpar_dependencias_regra(regra: Regra) -> None:
         db.session.delete(tema_regra)
 
 
+def _obter_jornada_info(tema: Tema | None) -> tuple[int | None, str | None]:
+    """Retorna o identificador e o nome da jornada vinculada ao tema (se houver)."""
+
+    if not tema:
+        return None, None
+
+    jornada = getattr(tema, 'jornada', None)
+    if not jornada and tema.jornada_id:
+        jornada = Jornada.query.get(tema.jornada_id)
+    if jornada:
+        return jornada.id, jornada.nome
+    return None, None
+
+
+def _atualizar_dias_para_tema(tema: Tema, jornada: Jornada | None = None) -> None:
+    """Sincroniza os dados de snapshot dos dias de comunicação para um tema."""
+
+    if jornada is None:
+        jornada = getattr(tema, 'jornada', None)
+        if jornada is None and tema.jornada_id:
+            jornada = Jornada.query.get(tema.jornada_id)
+
+    jornada_id = jornada.id if jornada else None
+    jornada_nome = jornada.nome if jornada else None
+
+    for dia in DiaComunicacao.query.filter_by(tema_id=tema.id).all():
+        dia.tema_nome = tema.nome
+        dia.jornada_id = jornada_id
+        dia.jornada_nome = jornada_nome
+
+
+def _preencher_dia_por_tema_regra(dia: DiaComunicacao, tema_regra: TemaRegra) -> None:
+    """Atualiza os campos derivados de um DiaComunicacao a partir do vínculo informado."""
+
+    dia.tema_id = tema_regra.tema_id
+    dia.tema_nome = tema_regra.tema.nome if tema_regra.tema else dia.tema_nome
+    dia.regra_id = tema_regra.regra_id
+    dia.tema_id_alternativo = (
+        tema_regra.alternativa.tema_id if getattr(tema_regra, 'alternativa', None) else None
+    )
+    jornada_id, jornada_nome = _obter_jornada_info(tema_regra.tema)
+    dia.jornada_id = jornada_id
+    dia.jornada_nome = jornada_nome
+
+
+def _desassociar_jornada(jornada: Jornada) -> None:
+    """Remove a associação dos temas vinculados a uma jornada antes da exclusão."""
+
+    for tema in list(jornada.temas):
+        tema.jornada = None
+        _atualizar_dias_para_tema(tema, jornada=None)
+
+
 @bp.route('/')
 def home():
     """Home page showing lists of all existing records and options to add new."""
     ensure_regra_padrao()
-    temas = Tema.query.order_by(Tema.nome).all()
+    temas = (
+        Tema.query.options(selectinload(Tema.jornada))
+        .order_by(Tema.nome)
+        .all()
+    )
     regras = Regra.query.order_by(Regra.descricao).all()
     temas_regras = (
         TemaRegra.query.options(
-            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.tema).selectinload(Tema.jornada),
             selectinload(TemaRegra.regra),
-            selectinload(TemaRegra.alternativa).selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.alternativa)
+            .selectinload(TemaRegra.tema)
+            .selectinload(Tema.jornada),
             selectinload(TemaRegra.alternativa).selectinload(TemaRegra.regra),
         )
         .order_by(TemaRegra.id)
@@ -95,10 +154,17 @@ def home():
     )
     dias = (
         DiaComunicacao.query.options(
-            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema),
+            selectinload(DiaComunicacao.tema_regra)
+            .selectinload(TemaRegra.tema)
+            .selectinload(Tema.jornada),
             selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.regra),
         )
         .order_by(DiaComunicacao.dia, DiaComunicacao.id)
+        .all()
+    )
+    jornadas = (
+        Jornada.query.options(selectinload(Jornada.temas))
+        .order_by(Jornada.nome)
         .all()
     )
     return render_template(
@@ -107,6 +173,7 @@ def home():
         regras=regras,
         temas_regras=temas_regras,
         dias=dias,
+        jornadas=jornadas,
     )
 
 
@@ -117,18 +184,25 @@ def novo_tema():
         nome = request.form.get('nome')
         descricao = request.form.get('descricao')
         objetivo = request.form.get('objetivo')
+        jornada_id = request.form.get('jornada_id') or None
         tema = Tema(
             nome=nome,
             descricao=descricao,
             objetivo=objetivo,
+            jornada_id=int(jornada_id) if jornada_id else None,
         )
         db.session.add(tema)
         db.session.commit()
         flash('Tema criado com sucesso!')
         return redirect(url_for('routes.home'))
 
-    temas = Tema.query.order_by(Tema.nome).all()
-    return render_template('tema_form.html', tema=None, temas=temas)
+    temas = (
+        Tema.query.options(selectinload(Tema.jornada))
+        .order_by(Tema.nome)
+        .all()
+    )
+    jornadas = Jornada.query.order_by(Jornada.nome).all()
+    return render_template('tema_form.html', tema=None, temas=temas, jornadas=jornadas)
 
 
 @bp.route('/tema/<int:tema_id>/editar', methods=['GET', 'POST'])
@@ -139,11 +213,20 @@ def editar_tema(tema_id):
         tema.nome = request.form.get('nome')
         tema.descricao = request.form.get('descricao')
         tema.objetivo = request.form.get('objetivo')
+        jornada_id = request.form.get('jornada_id') or None
+        tema.jornada = Jornada.query.get(int(jornada_id)) if jornada_id else None
+        db.session.flush()
+        _atualizar_dias_para_tema(tema)
         db.session.commit()
         flash('Tema atualizado com sucesso!')
         return redirect(url_for('routes.home'))
-    temas = Tema.query.order_by(Tema.nome).all()
-    return render_template('tema_form.html', tema=tema, temas=temas)
+    temas = (
+        Tema.query.options(selectinload(Tema.jornada))
+        .order_by(Tema.nome)
+        .all()
+    )
+    jornadas = Jornada.query.order_by(Jornada.nome).all()
+    return render_template('tema_form.html', tema=tema, temas=temas, jornadas=jornadas)
 
 
 @bp.route('/tema/<int:tema_id>/deletar', methods=['POST'])
@@ -197,16 +280,77 @@ def deletar_regra(regra_id):
     return redirect(url_for('routes.home'))
 
 
+@bp.route('/jornada/novo', methods=['GET', 'POST'])
+def nova_jornada():
+    """Cria uma nova jornada para agrupar temas."""
+
+    if request.method == 'POST':
+        nome = request.form.get('nome')
+        descricao = request.form.get('descricao')
+        jornada = Jornada(nome=nome, descricao=descricao)
+        db.session.add(jornada)
+        db.session.commit()
+        flash('Jornada criada com sucesso!')
+        return redirect(url_for('routes.home'))
+
+    jornadas = (
+        Jornada.query.options(selectinload(Jornada.temas).selectinload(Tema.jornada))
+        .order_by(Jornada.nome)
+        .all()
+    )
+    return render_template('jornada_form.html', jornada=None, jornadas=jornadas)
+
+
+@bp.route('/jornada/<int:jornada_id>/editar', methods=['GET', 'POST'])
+def editar_jornada(jornada_id):
+    """Atualiza dados de uma jornada existente."""
+
+    jornada = Jornada.query.get_or_404(jornada_id)
+    if request.method == 'POST':
+        jornada.nome = request.form.get('nome')
+        jornada.descricao = request.form.get('descricao')
+        for tema in jornada.temas:
+            _atualizar_dias_para_tema(tema, jornada)
+        db.session.commit()
+        flash('Jornada atualizada com sucesso!')
+        return redirect(url_for('routes.home'))
+
+    jornadas = (
+        Jornada.query.options(selectinload(Jornada.temas).selectinload(Tema.jornada))
+        .order_by(Jornada.nome)
+        .all()
+    )
+    return render_template('jornada_form.html', jornada=jornada, jornadas=jornadas)
+
+
+@bp.route('/jornada/<int:jornada_id>/deletar', methods=['POST'])
+def deletar_jornada(jornada_id):
+    """Remove uma jornada e desassocia os temas vinculados."""
+
+    jornada = Jornada.query.get_or_404(jornada_id)
+    _desassociar_jornada(jornada)
+    db.session.delete(jornada)
+    db.session.commit()
+    flash('Jornada deletada com sucesso!')
+    return redirect(url_for('routes.home'))
+
+
 @bp.route('/tema_regra/novo', methods=['GET', 'POST'])
 def novo_tema_regra():
     """Create a new TemaRegra linking a Tema and a Regra."""
-    temas = Tema.query.order_by(Tema.nome).all()
+    temas = (
+        Tema.query.options(selectinload(Tema.jornada))
+        .order_by(Tema.nome)
+        .all()
+    )
     regras = Regra.query.order_by(Regra.descricao).all()
     tema_regra_lista = (
         TemaRegra.query.options(
-            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.tema).selectinload(Tema.jornada),
             selectinload(TemaRegra.regra),
-            selectinload(TemaRegra.alternativa).selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.alternativa)
+            .selectinload(TemaRegra.tema)
+            .selectinload(Tema.jornada),
             selectinload(TemaRegra.alternativa).selectinload(TemaRegra.regra),
         )
         .order_by(TemaRegra.id)
@@ -240,14 +384,31 @@ def novo_tema_regra():
 @bp.route('/tema_regra/<int:tr_id>/editar', methods=['GET', 'POST'])
 def editar_tema_regra(tr_id):
     """Edit a TemaRegra relationship."""
-    tema_regra = TemaRegra.query.get_or_404(tr_id)
-    temas = Tema.query.order_by(Tema.nome).all()
+    tema_regra = (
+        TemaRegra.query.options(
+            selectinload(TemaRegra.tema).selectinload(Tema.jornada),
+            selectinload(TemaRegra.regra),
+            selectinload(TemaRegra.alternativa)
+            .selectinload(TemaRegra.tema)
+            .selectinload(Tema.jornada),
+            selectinload(TemaRegra.dias),
+        )
+        .filter_by(id=tr_id)
+        .first_or_404()
+    )
+    temas = (
+        Tema.query.options(selectinload(Tema.jornada))
+        .order_by(Tema.nome)
+        .all()
+    )
     regras = Regra.query.order_by(Regra.descricao).all()
     tema_regra_lista = (
         TemaRegra.query.options(
-            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.tema).selectinload(Tema.jornada),
             selectinload(TemaRegra.regra),
-            selectinload(TemaRegra.alternativa).selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.alternativa)
+            .selectinload(TemaRegra.tema)
+            .selectinload(Tema.jornada),
             selectinload(TemaRegra.alternativa).selectinload(TemaRegra.regra),
         )
         .order_by(TemaRegra.id)
@@ -255,7 +416,7 @@ def editar_tema_regra(tr_id):
     )
     tema_regra_opcoes = (
         TemaRegra.query.options(
-            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.tema).selectinload(Tema.jornada),
             selectinload(TemaRegra.regra),
         )
         .filter(TemaRegra.id != tr_id)
@@ -263,8 +424,12 @@ def editar_tema_regra(tr_id):
         .all()
     )
     if request.method == 'POST':
-        tema_regra.tema_id = int(request.form.get('tema_id'))
-        tema_regra.regra_id = int(request.form.get('regra_id'))
+        tema_id = int(request.form.get('tema_id'))
+        regra_id = int(request.form.get('regra_id'))
+        tema_regra.tema = Tema.query.get(tema_id)
+        tema_regra.tema_id = tema_id
+        tema_regra.regra = Regra.query.get(regra_id)
+        tema_regra.regra_id = regra_id
         alternativa_id = request.form.get('alternativa_id') or None
         if alternativa_id:
             alternativa_id = int(alternativa_id)
@@ -289,6 +454,9 @@ def editar_tema_regra(tr_id):
                 visitados.add(corrente.alternativa_id)
                 corrente = TemaRegra.query.get(corrente.alternativa_id)
         tema_regra.alternativa_id = alternativa_id
+        db.session.flush()
+        for dia in tema_regra.dias:
+            _preencher_dia_por_tema_regra(dia, tema_regra)
         db.session.commit()
         flash('Vínculo Tema–Regra atualizado com sucesso!')
         return redirect(url_for('routes.home'))
@@ -318,7 +486,7 @@ def deletar_tema_regra(tr_id):
 def novo_dia():
     tema_regras = (
         TemaRegra.query.options(
-            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.tema).selectinload(Tema.jornada),
             selectinload(TemaRegra.regra),
         )
         .order_by(TemaRegra.id)
@@ -326,7 +494,9 @@ def novo_dia():
     )
     dias_existentes = (
         DiaComunicacao.query.options(
-            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema),
+            selectinload(DiaComunicacao.tema_regra)
+            .selectinload(TemaRegra.tema)
+            .selectinload(Tema.jornada),
             selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.regra),
         )
         .order_by(DiaComunicacao.dia, DiaComunicacao.id)
@@ -335,8 +505,19 @@ def novo_dia():
     if request.method == 'POST':
         dia = int(request.form['dia'])
         tr_id = int(request.form['tr_id'])
-        tr = TemaRegra.query.get_or_404(tr_id)
+        tr = (
+            TemaRegra.query.options(
+                selectinload(TemaRegra.tema).selectinload(Tema.jornada),
+                selectinload(TemaRegra.regra),
+                selectinload(TemaRegra.alternativa)
+                .selectinload(TemaRegra.tema)
+                .selectinload(Tema.jornada),
+            )
+            .filter_by(id=tr_id)
+            .first_or_404()
+        )
         # cria o registro copiando os dados do vínculo
+        jornada_id, jornada_nome = _obter_jornada_info(tr.tema)
         dc = DiaComunicacao(
             dia=dia,
             tema_regra_id=tr_id,
@@ -346,6 +527,8 @@ def novo_dia():
             tema_id_alternativo=(
                 tr.alternativa.tema_id if getattr(tr, 'alternativa', None) else None
             ),
+            jornada_id=jornada_id,
+            jornada_nome=jornada_nome,
         )
         db.session.add(dc)
         db.session.commit()
@@ -365,7 +548,7 @@ def editar_dia(dia_id):
     dia = DiaComunicacao.query.get_or_404(dia_id)
     tema_regras = (
         TemaRegra.query.options(
-            selectinload(TemaRegra.tema),
+            selectinload(TemaRegra.tema).selectinload(Tema.jornada),
             selectinload(TemaRegra.regra),
         )
         .order_by(TemaRegra.id)
@@ -373,7 +556,9 @@ def editar_dia(dia_id):
     )
     dias_existentes = (
         DiaComunicacao.query.options(
-            selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.tema),
+            selectinload(DiaComunicacao.tema_regra)
+            .selectinload(TemaRegra.tema)
+            .selectinload(Tema.jornada),
             selectinload(DiaComunicacao.tema_regra).selectinload(TemaRegra.regra),
         )
         .order_by(DiaComunicacao.dia, DiaComunicacao.id)
@@ -381,7 +566,20 @@ def editar_dia(dia_id):
     )
     if request.method == 'POST':
         dia.dia = int(request.form.get('dia'))
-        dia.tema_regra_id = int(request.form.get('tr_id'))
+        novo_tr_id = int(request.form.get('tr_id'))
+        tema_regra = (
+            TemaRegra.query.options(
+                selectinload(TemaRegra.tema).selectinload(Tema.jornada),
+                selectinload(TemaRegra.regra),
+                selectinload(TemaRegra.alternativa)
+                .selectinload(TemaRegra.tema)
+                .selectinload(Tema.jornada),
+            )
+            .filter_by(id=novo_tr_id)
+            .first_or_404()
+        )
+        dia.tema_regra_id = novo_tr_id
+        _preencher_dia_por_tema_regra(dia, tema_regra)
         db.session.commit()
         flash('Dia atualizado com sucesso!')
         return redirect(url_for('routes.home'))
@@ -411,14 +609,18 @@ def gerar_diagrama_mermaid() -> str:
         tr.id: tr
         for tr in (
             TemaRegra.query.options(
-                selectinload(TemaRegra.tema),
+                selectinload(TemaRegra.tema).selectinload(Tema.jornada),
                 selectinload(TemaRegra.regra),
             ).all()
         )
     }
 
     dias = (
-        DiaComunicacao.query.options(selectinload(DiaComunicacao.tema_regra))
+        DiaComunicacao.query.options(
+            selectinload(DiaComunicacao.tema_regra)
+            .selectinload(TemaRegra.tema)
+            .selectinload(Tema.jornada)
+        )
         .order_by(DiaComunicacao.dia, DiaComunicacao.id)
         .all()
     )
@@ -506,10 +708,20 @@ def gerar_diagrama_mermaid() -> str:
                     etapa.tema.nome if etapa.tema else registro.tema_nome,
                     'Tema',
                 )
+                jornada_label = sanitize(
+                    (
+                        etapa.tema.jornada.nome
+                        if etapa.tema and getattr(etapa.tema, 'jornada', None)
+                        else registro.jornada_nome
+                    ),
+                    '',
+                )
                 regra_label = sanitize(
                     etapa.regra.descricao if etapa.regra else '',
                     '',
                 )
+                if jornada_label:
+                    tema_label = f"{tema_label}<br/>Jornada: {jornada_label}"
                 has_rule = bool(regra_label) and regra_label.lower() not in {
                     'sem regra',
                 }

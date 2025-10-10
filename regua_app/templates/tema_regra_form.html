@@ -17,7 +17,7 @@
         <select id="tema_id" name="tema_id" class="form-select" required>
           {% for t in temas %}
           <option value="{{ t.id }}"{% if selected_tema_id and selected_tema_id == t.id %} selected{% endif %}>
-            {{ t.nome }}
+            {{ t.nome }}{% if t.jornada %} — {{ t.jornada.nome }}{% endif %}
           </option>
           {% endfor %}
         </select>
@@ -38,7 +38,7 @@
           <option value="">Nenhuma</option>
           {% for vinculo in tema_regra_opcoes %}
           <option value="{{ vinculo.id }}"{% if tema_regra and tema_regra.alternativa_id == vinculo.id %} selected{% endif %}>
-            {{ vinculo.tema.nome }} — {{ vinculo.regra.descricao }}
+            {{ vinculo.tema.nome }}{% if vinculo.tema.jornada %} — {{ vinculo.tema.jornada.nome }}{% endif %} / {{ vinculo.regra.descricao }}
           </option>
           {% endfor %}
         </select>
@@ -60,25 +60,27 @@
       <p class="text-muted">Visualize rapidamente os vínculos existentes e como as alternativas estão configuradas.</p>
       {% if tema_regra_lista %}
       <div class="table-wrap">
-        <table class="table table-hover align-middle">
-          <thead>
-            <tr>
-              <th scope="col">ID</th>
-              <th scope="col">Tema</th>
-              <th scope="col">Regra</th>
-              <th scope="col">Alternativa</th>
-              <th scope="col" class="text-end">Ações</th>
-            </tr>
-          </thead>
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Tema</th>
+                <th scope="col">Jornada</th>
+                <th scope="col">Regra</th>
+                <th scope="col">Alternativa</th>
+                <th scope="col" class="text-end">Ações</th>
+              </tr>
+            </thead>
           <tbody>
             {% for item in tema_regra_lista %}
-            <tr>
-              <td><span class="badge badge-id">#{{ item.id }}</span></td>
-              <td class="fw-semibold">{{ item.tema.nome }}</td>
-              <td class="text-muted">{{ item.regra.descricao }}</td>
-              <td>
-                {% if item.alternativa %}
-                <span class="badge bg-secondary-subtle text-dark">{{ item.alternativa.tema.nome }} / {{ item.alternativa.regra.descricao }}</span>
+              <tr>
+                <td><span class="badge badge-id">#{{ item.id }}</span></td>
+                <td class="fw-semibold">{{ item.tema.nome }}</td>
+                <td class="text-muted">{{ item.tema.jornada.nome if item.tema.jornada else '—' }}</td>
+                <td class="text-muted">{{ item.regra.descricao }}</td>
+                <td>
+                  {% if item.alternativa %}
+                  <span class="badge bg-secondary-subtle text-dark">{{ item.alternativa.tema.nome }} / {{ item.alternativa.regra.descricao }}</span>
                 {% else %}
                 <span class="text-muted">Nenhuma</span>
                 {% endif %}
