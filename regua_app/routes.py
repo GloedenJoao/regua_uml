@@ -40,6 +40,43 @@ def ensure_regra_padrao() -> None:
         db.session.commit()
 
 
+def _limpar_dependencias_tema_regra(tema_regra: TemaRegra) -> None:
+    """Remove dependências de um registro de TemaRegra antes da exclusão."""
+
+    # Remove os dias associados diretamente a este vínculo.
+    for dia in list(tema_regra.dias):
+        db.session.delete(dia)
+
+    # Zera a referência de registros que apontam para este vínculo como alternativa.
+    for dependente in TemaRegra.query.filter_by(alternativa_id=tema_regra.id).all():
+        dependente.alternativa_id = None
+
+
+def _limpar_dependencias_tema(tema: Tema) -> None:
+    """Remove relações e dias de comunicação vinculados a um tema."""
+
+    # Remove vínculos (e seus dias) em que o tema é o principal.
+    for tema_regra in list(tema.tema_regras):
+        _limpar_dependencias_tema_regra(tema_regra)
+        db.session.delete(tema_regra)
+
+    # Desassocia vínculos onde o tema é usado como alternativa.
+    for dependente in TemaRegra.query.filter_by(tema_id_alternativo=tema.id).all():
+        dependente.tema_id_alternativo = None
+
+    # Desassocia variações que apontam para este tema.
+    for variacao in list(tema.variacoes):
+        variacao.id_alternativo = None
+
+
+def _limpar_dependencias_regra(regra: Regra) -> None:
+    """Remove vínculos e dias associados a uma regra."""
+
+    for tema_regra in list(regra.tema_regras):
+        _limpar_dependencias_tema_regra(tema_regra)
+        db.session.delete(tema_regra)
+
+
 @bp.route('/')
 def home():
     """Home page showing lists of all existing records and options to add new."""
@@ -113,6 +150,7 @@ def editar_tema(tema_id):
 def deletar_tema(tema_id):
     """Delete a Tema and cascade delete related records."""
     tema = Tema.query.get_or_404(tema_id)
+    _limpar_dependencias_tema(tema)
     db.session.delete(tema)
     db.session.commit()
     flash('Tema deletado com sucesso!')
@@ -152,6 +190,7 @@ def editar_regra(regra_id):
 def deletar_regra(regra_id):
     """Delete a Regra and cascade delete related TemaRegra and Dias."""
     regra = Regra.query.get_or_404(regra_id)
+    _limpar_dependencias_regra(regra)
     db.session.delete(regra)
     db.session.commit()
     flash('Regra deletada com sucesso!')
@@ -268,6 +307,7 @@ def editar_tema_regra(tr_id):
 def deletar_tema_regra(tr_id):
     """Delete a TemaRegra and cascade delete its Dias."""
     tema_regra = TemaRegra.query.get_or_404(tr_id)
+    _limpar_dependencias_tema_regra(tema_regra)
     db.session.delete(tema_regra)
     db.session.commit()
     flash('Vínculo Tema–Regra deletado com sucesso!')
@@ -361,10 +401,6 @@ def deletar_dia(dia_id):
     db.session.commit()
     flash('Dia de comunicação deletado com sucesso!')
     return redirect(url_for('routes.home'))
-
-
-from .models import DiaComunicacao, TemaRegra
-
 
 def gerar_diagrama_mermaid() -> str:
     """Monta o código Mermaid (flowchart LR) com cadeia de alternativas."""
